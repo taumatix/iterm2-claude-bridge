@@ -3,29 +3,51 @@
 Ordered by how much each entry limits real use. The top is the next thing worth doing unless
 there is a reason to say otherwise.
 
-## 1. A tab has still never been opened
+The numbers are the order and nothing else: inserting an entry renumbers everything below it, so
+anything outside this file — the README, a changelog entry, an issue — refers to an entry **by its
+title**. A reference by number was wrong twice within a day of being written.
 
-The first real run, on 2026-09-26, got as far as the click and no further: every click answered
-"that session is no longer being reported", because the row's key could not survive being an HTML
-attribute. That is fixed, and reaching that error proved four things that had been unknown — the
-toolbelt tool registers and renders, the web view runs the page's JavaScript, its `fetch` to
-`127.0.0.1` is not blocked by a content-security policy, and the token in the URL is accepted.
+## 1. What two real runs have not reached yet
 
-What is still unknown is everything past the lookup:
+Two runs on 2026-09-26 took this from "no click was ever served" to "a tab opens, in the right
+window, running ssh with the user's environment". Between them they settled six things that had
+been listed here as plausible ways the program was broken: the toolbelt tool registers and
+renders, the web view runs the page's JavaScript, its `fetch` to `127.0.0.1` is not blocked, the
+token in the URL is accepted, `CreateTab` with `"Custom Command": "Yes"` runs the ssh command
+rather than a plain shell, and `ssh` itself runs from a tab iTerm2 spawned.
 
-- Whether `"Custom Command": "Yes"` plus `"Command"` in `CustomProfileProperties` actually makes
-  the new tab run the ssh command, rather than opening a plain shell and ignoring it.
+What no run has reported either way:
+
 - Whether `tmux select-window -t @N ';' attach-session -t name` behaves over `ssh -t` the way it
-  does locally.
+  does locally — the user lands somewhere, but nobody has said whether it is the pane Claude is in.
 - Whether reading `user.iterm2ClaudeBridge` on every session is fast enough to click through, or
   wants the per-session round trips replacing.
-- Whether `ssh` works at all from a tab iTerm2 spawned: no automated test has connected to a host,
-  because `sshd` here has no key authorised for it.
+- Whether the three properties added on 2026-09-26 are accepted: `"Run Command In Login Shell"`,
+  `window_id` from a `FocusRequest`, and the `\(` refusal.
 
-Nothing else on this list can be trusted until a click has opened a working tab, so this stays at
-the top.
+## 2. Escaping, rather than refusing, a command iTerm2 will evaluate
 
-## 2. Only a tab this program opened can be found again
+A profile's `Command` is an interpolated string — `computeCommandForProfile` evaluates it with
+`iTermExpressionEvaluator`, side effects allowed, before `-componentsInShellCommand` splits it
+into argv. A tmux session name comes from another machine and lands in that string, so a name
+containing `\(` runs an iTerm2 expression on the Mac. Shell quoting happens a layer too late.
+
+Today that command is refused, which fails closed and costs a user with such a name their click.
+Escaping it properly means establishing two things that can only be established against a running
+iTerm2, because the layers compose:
+
+- Whether doubling a backslash neutralises the expression opener as `iTermSwiftyStringParser.m`
+  reads like it should (`\` then a character that is not `(` returns to the literal state), and
+  whether the literal that survives evaluation still carries both backslashes.
+- What `-componentsInShellCommand` then does with them, since it has its own backslash handling
+  and the two must not cancel to something different from what was meant.
+
+The repo's own history says how to settle it: the missing quotes around tmux's `;` were found by
+running the built command through a real `/bin/sh` with a stub `tmux`, after a string-level test
+had blessed the broken version. The equivalent here needs iTerm2 in the loop, which is why this
+sits behind the entry above rather than in front of it.
+
+## 3. Only a tab this program opened can be found again
 
 Clicking a row finds an existing tab by a variable this program wrote on tabs it created. Two
 cases it therefore cannot see, both of which a user hits on the first day:
@@ -49,7 +71,7 @@ Two costs to establish before building it:
 - Whether the sequence survives `ssh` and reaches iTerm2 as a session variable at all has not been
   tried. iTerm2's escape-code documentation says nothing about tmux or ssh.
 
-## 3. The chat / diff / code-review peers
+## 4. The chat / diff / code-review peers
 
 iTerm2's own integration puts three sessions one click apart — Chat, Diff and Code Review — and a
 remote session gets none of them. That is the gap a user notices immediately after clicking works.
@@ -74,7 +96,7 @@ which is a much worse thing to ask for and probably means asking iTerm2 upstream
 Answer that question against a real iTerm2 first. It is one experiment and it decides whether this
 entry is small or is a request to George Nachman.
 
-## 4. Two panels is the wrong answer if iTerm2 will take rows
+## 5. Two panels is the wrong answer if iTerm2 will take rows
 
 Remote sessions appear in their own toolbelt tool beside iTerm2's Session Status, so a user
 watching both local and remote Claude sessions reads two lists. That is a workaround for iTerm2
@@ -85,7 +107,7 @@ third party — a variable, an RPC, anything published. If it can, this becomes 
 program. Until then the second panel is right, because guessing at an internal would break on
 every iTerm2 release.
 
-## 5. A session's status goes stale when the hook cannot run
+## 6. A session's status goes stale when the hook cannot run
 
 Status is only as good as the last hook that fired. If Claude is killed, the machine sleeps, or
 the hook fails, the row keeps saying "working" forever, and nothing distinguishes that from a long
@@ -96,7 +118,7 @@ and grey out anything older than some threshold. The second is to have the repor
 the process behind a session is gone — which needs the hook to record a pid, and the stream to
 check it.
 
-## 6. Nothing verifies that the remote and local builds agree
+## 7. Nothing verifies that the remote and local builds agree
 
 The two halves talk over a versioned wire format, and the remote one is upgraded by whoever
 administers that host. Unknown fields and unknown statuses are ignored rather than rejected, which
@@ -106,14 +128,14 @@ with nothing saying so.
 A version in the stream's first line, and a warning in the panel when it is older than the
 watcher expects.
 
-## 7. Discover hosts rather than listing them
+## 8. Discover hosts rather than listing them
 
 `--host` per host, every time. Reading them from a config file, or from `~/.ssh/config` with a
 marker, would make watching a dozen machines reasonable. A config file also gives somewhere for
 per-host settings — a different profile, a different remote command — which the flags cannot
 express today.
 
-## 8. The panel polls itself every five seconds
+## 9. The panel polls itself every five seconds
 
 A full page reload on a timer is the simplest thing that works and it is wasteful: it re-renders
 while nothing has changed, and a click landing during a reload is lost (worked around by

@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A click opened a new window instead of a tab.** `CreateTab` creates a window when it is given
+  no window id, and it was given none. The tab now goes in the window the user is looking at,
+  which `FocusRequest` reports as the key terminal window — the toolbelt that was clicked belongs
+  to it. A window that is current but not key is the fallback, for a click that arrives while a
+  non-terminal window has focus; if iTerm2 cannot say, the tab still opens, in a new window, and
+  the reason is logged.
+
+- **`ssh` ran without the environment the user's dotfiles build**, so a `SSH_AUTH_SOCK` set in
+  `~/.zshrc` — the agent holding their keys — was missing and key authentication could fail.
+  iTerm2 exec's a custom command directly unless the profile says otherwise. New tabs now set
+  `"Run Command In Login Shell"` (iTerm2's `KEY_RUN_COMMAND_IN_LOGIN_SHELL`, default off), which
+  makes iTerm2 wrap the command in `/usr/bin/login … --launch_shell - -i -c`, running the login
+  shell interactively so the rc files are sourced first.
+
+### Security
+
+- **A tmux session name could run an iTerm2 expression.** A profile's `Command` is an interpolated
+  string: iTerm2 evaluates it with `iTermExpressionEvaluator`, side effects allowed, *before*
+  splitting it into arguments. Shell quoting happens a layer later and does not help. A remote
+  host could therefore name a tmux session `work\(…)` and have the expression evaluated on the
+  Mac. Present since 0.1.0 and found while reading iTerm2's source for the two fixes above.
+
+  A command containing `\(` is now refused, with the reason shown in the panel. That is the
+  expression opener and the only one, per iTerm2's `iTermSwiftyStringParser.m`. Refusing rather
+  than escaping, because escaping correctly means knowing how iTerm2's expression layer and its
+  shell tokenizer compose, and nothing here can run either — see `ROADMAP.md`.
+
 ## [0.1.1] - 2026-09-26
 
 ### Fixed
@@ -99,14 +128,14 @@ schedule, and which test failed was a property of the scheduler rather than of t
 - **Nothing here has talked to a real iTerm2 or a real SSH server.** The logic is covered end to
   end, including the hook recording from inside a real tmux pane, but those two edges are driven
   by fakes: the machine this was built on has iTerm2's API switched off and no key authorised for
-  its own `sshd`. `UPSTREAM.md` lists what one real run would settle and `ROADMAP.md` entry 1
-  tracks it.
+  its own `sshd`. `UPSTREAM.md` lists what one real run would settle and `ROADMAP.md` tracks it
+  under *What two real runs have not reached yet*.
 - Remote sessions appear in a second toolbelt panel beside iTerm2's own rather than in one
   combined list, because iTerm2 documents no way for a third party to contribute rows
-  (`ROADMAP.md` entry 4 — it was entry 2 when this was written; the roadmap was reordered in
-  0.1.1).
+  (`ROADMAP.md`, *Two panels is the wrong answer if iTerm2 will take rows*).
 - A session's status is only as fresh as the last hook that fired. If Claude is killed or the
-  machine sleeps, the row keeps saying "working" (`ROADMAP.md` entry 5, was entry 3).
+  machine sleeps, the row keeps saying "working" (`ROADMAP.md`, *A session's status goes stale
+  when the hook cannot run*).
 
 [Unreleased]: https://github.com/taumatix/iterm2-claude-bridge/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/taumatix/iterm2-claude-bridge/releases/tag/v0.1.1
