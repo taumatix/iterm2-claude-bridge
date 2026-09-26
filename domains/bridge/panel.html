@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Remote Claude</title>
+<style>
+  /* The panel lives in iTerm2's toolbelt, which is narrow and follows the
+     system appearance, so this uses system colours rather than its own theme
+     and stays legible in light and dark. */
+  :root { color-scheme: light dark; }
+  body {
+    font: 12px -apple-system, system-ui, sans-serif;
+    margin: 0; padding: 4px;
+    background: Canvas; color: CanvasText;
+  }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li {
+    display: flex; align-items: baseline; gap: 6px;
+    padding: 4px 6px; border-radius: 4px;
+    cursor: pointer;
+  }
+  li:hover { background: color-mix(in srgb, CanvasText 10%, Canvas); }
+  li[aria-disabled="true"] { cursor: default; opacity: 0.65; }
+  li[aria-disabled="true"]:hover { background: none; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  /* Distinguishable without relying on hue alone: each row also carries its
+     status as text, because these three colours are a common confusion pair. */
+  .working  { background: #2f7fe0; }
+  .waiting  { background: #e0902f; }
+  .idle     { background: #8a8a8e; }
+  .gone     { background: #c8453c; }
+  .unknown  { background: #8a8a8e; }
+
+  .where { flex: 1 1 auto; min-width: 0; }
+  .host { font-weight: 600; }
+  .cwd {
+    display: block;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    direction: rtl; text-align: left;  /* keep the tail of a long path visible */
+    opacity: 0.75;
+  }
+  .meta { flex: none; opacity: 0.6; font-variant-numeric: tabular-nums; }
+  .empty { padding: 8px 6px; opacity: 0.7; }
+  #error {
+    margin: 4px 6px; padding: 4px 6px; border-radius: 4px;
+    background: color-mix(in srgb, #c8453c 25%, Canvas);
+    display: none;
+  }
+</style>
+
+<div id="error" role="alert"></div>
+
+{{if .Rows}}
+<ul>
+  {{range .Rows}}
+  <li data-key="{{.Key}}"
+      {{if not .Attachable}}aria-disabled="true"{{end}}
+      title="{{.Host}} · {{.StatusText}}{{if .Tmux}} · tmux {{.Tmux}}{{else}} · not under tmux{{end}}{{if .Cwd}} · {{.Cwd}}{{end}}">
+    <span class="dot {{.Status}}"></span>
+    <span class="where">
+      <span class="host">{{.Host}}</span>
+      {{if .Cwd}}<span class="cwd">{{.Cwd}}</span>{{end}}
+    </span>
+    <span class="meta">{{.StatusText}} · {{.Age}}</span>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<div class="empty">No remote Claude sessions.</div>
+{{end}}
+
+<script>
+  const token = {{.Token}};
+
+  // The panel is a plain page, so it refreshes itself rather than holding a
+  // connection open. Five seconds is often enough for a status light and cheap:
+  // the request never leaves the machine.
+  let reloadTimer = setTimeout(() => location.reload(), 5000);
+
+  function showError(message) {
+    const box = document.getElementById("error");
+    box.textContent = message;
+    box.style.display = "block";
+    // Stop the reload so the message can be read.
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => location.reload(), 8000);
+  }
+
+  document.querySelectorAll("li[data-key]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      if (row.getAttribute("aria-disabled") === "true") {
+        showError("That session is not running under tmux, so there is nothing to attach to.");
+        return;
+      }
+      // Cancel the pending reload: replacing the page underneath a click that is
+      // still being served loses the result.
+      clearTimeout(reloadTimer);
+      row.style.opacity = "0.5";
+
+      try {
+        const body = new URLSearchParams({ key: row.dataset.key, token });
+        const response = await fetch("/open", { method: "POST", body });
+        if (!response.ok) {
+          const detail = await response.json().catch(() => ({}));
+          showError(detail.error || `Could not open that session (${response.status}).`);
+          row.style.opacity = "";
+          return;
+        }
+        reloadTimer = setTimeout(() => location.reload(), 1000);
+      } catch (err) {
+        showError(String(err));
+        row.style.opacity = "";
+      }
+    });
+  });
+</script>
