@@ -277,11 +277,11 @@ func TestWatchRemovesAnEndedSessionAfterTheGrace(t *testing.T) {
 	watchInBackground(t, w, "box")
 
 	waitFor(t, "the session to be reported gone", func() bool {
-		s, ok := registry.Lookup("box\x00s1")
+		s, ok := registry.Lookup(session.Key("box", "s1"))
 		return ok && s.Status == session.StatusGone
 	})
 	waitFor(t, "the ended session's row to disappear", func() bool {
-		_, ok := registry.Lookup("box\x00s1")
+		_, ok := registry.Lookup(session.Key("box", "s1"))
 		return !ok
 	})
 }

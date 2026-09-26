@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/html"
 
 	iterm2 "github.com/taumatix/iterm2-go"
 	"github.com/taumatix/iterm2-go/apipb"
@@ -242,6 +243,90 @@ func TestPanelListensOnLoopbackOnly(t *testing.T) {
 	assert.True(t, strings.HasPrefix(p.URL(), "http://127.0.0.1:"), "URL was %s", p.URL())
 }
 
+func TestClickingARowSendsAKeyThePanelStillRecognises(t *testing.T) {
+	// The key makes a round trip every other test in this file skips: it is
+	// rendered into an HTML attribute, parsed by a browser, and posted back.
+	//
+	// v0.1.0 joined the two halves of a key with a NUL byte, which html/template
+	// replaces with U+FFFD (htmlReplacementTable[0]) and which the HTML5
+	// tokenizer would replace anyway. So the key arriving at /open never matched
+	// the one the registry held, and every click — on every row, tmux or not —
+	// answered "that session is no longer being reported". Posting a key taken
+	// straight from the registry cannot see that. Only reading it back out of the
+	// rendered page can.
+	registry := session.NewRegistry()
+	remoteSession(t, registry, "build-box", "5f3a9c2e-1d7b-4a55-9e10-2c4f8b6d0a13", session.StatusWaiting, "work")
+
+	term := newFakeTerminal()
+	p := startPanel(t, registry, term)
+
+	code, page := get(t, p.URL())
+	require.Equal(t, http.StatusOK, code)
+
+	code, body := postOpen(t, p, dataKeyFromRenderedPanel(t, page), tokenFrom(t, p))
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Contains(t, body, `"created":true`)
+}
+
+func TestAKeySurvivesTheRoundTripWhateverTheHostAndSessionAreCalled(t *testing.T) {
+	// Host aliases come from the user's ssh config and session ids from Claude, so
+	// neither is this program's to constrain. Whatever they contain has to come
+	// back out of an HTML attribute as itself.
+	registry := session.NewRegistry()
+	e := session.Event{
+		Host:      `box "one" & <two>/three`,
+		SessionID: "sessioñ id\twith\x00control",
+		Status:    session.StatusWaiting,
+		At:        time.Now().UTC(),
+		Cwd:       "/srv/app",
+		Tmux:      session.TmuxTarget{Session: "work", Window: "@1"},
+	}
+	require.True(t, registry.Apply(e))
+
+	p := startPanel(t, registry, newFakeTerminal())
+
+	code, page := get(t, p.URL())
+	require.Equal(t, http.StatusOK, code)
+
+	code, body := postOpen(t, p, dataKeyFromRenderedPanel(t, page), tokenFrom(t, p))
+	require.Equal(t, http.StatusOK, code, body)
+}
+
+// dataKeyFromRenderedPanel reads the data-key of the first row the way iTerm2's
+// web view does.
+//
+// golang.org/x/net/html implements the HTML5 tokenizer, so it reproduces the
+// character-level substitutions a browser makes rather than trusting the bytes
+// the template emitted — which is the point: a string match against the template
+// output is the encoder checking its own work.
+func dataKeyFromRenderedPanel(t *testing.T, page string) string {
+	t.Helper()
+	doc, err := html.Parse(strings.NewReader(page))
+	require.NoError(t, err)
+
+	var key string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if key != "" {
+			return
+		}
+		if n.Type == html.ElementNode && n.Data == "li" {
+			for _, a := range n.Attr {
+				if a.Key == "data-key" {
+					key = a.Val
+					return
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	require.NotEmpty(t, key, "the panel rendered no row carrying a data-key")
+	return key
+}
+
 func TestClickingARowOpensATabRunningTheSSHCommand(t *testing.T) {
 	registry := session.NewRegistry()
 	key := remoteSession(t, registry, "build-box", "s1", session.StatusWaiting, "work")
@@ -323,6 +408,18 @@ func TestClickingARowWithATabAlreadyOpenDoesNotOpenAnother(t *testing.T) {
 	assert.Empty(t, term.createOpts, "an existing tab should be activated, not duplicated")
 }
 
+func TestTagsStayDistinctWhenAHostOrTmuxNameContainsASlash(t *testing.T) {
+	// A tab is found by its tag, so two different tabs sharing one would make a
+	// click reveal whichever iTerm2 listed first.
+	assert.NotEqual(t,
+		bridge.Tag("a", session.TmuxTarget{Session: "b/c"}),
+		bridge.Tag("a/b", session.TmuxTarget{Session: "c"}))
+
+	// Ordinary names are unchanged, so a tab tagged by an earlier version is
+	// still recognised.
+	assert.Equal(t, "box/work", bridge.Tag("box", session.TmuxTarget{Session: "work"}))
+}
+
 func TestClickingARowTaggedForAnotherSessionOpensItsOwnTab(t *testing.T) {
 	registry := session.NewRegistry()
 	key := remoteSession(t, registry, "box", "s1", session.StatusIdle, "work")
@@ -342,7 +439,7 @@ func TestClickingASessionThatIsNoLongerReportedSaysSo(t *testing.T) {
 	registry := session.NewRegistry()
 	p := startPanel(t, registry, newFakeTerminal())
 
-	code, body := postOpen(t, p, "box\x00gone", tokenFrom(t, p))
+	code, body := postOpen(t, p, session.Key("box", "gone"), tokenFrom(t, p))
 	assert.Equal(t, http.StatusNotFound, code)
 	assert.Contains(t, body, "no longer being reported")
 }

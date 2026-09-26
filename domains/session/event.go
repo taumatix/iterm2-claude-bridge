@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -77,7 +78,24 @@ func (t TmuxTarget) Zero() bool {
 // Key identifies a session across events. Claude's session id is unique on its
 // own, but not between hosts once several are watched.
 func (e Event) Key() string {
-	return e.Host + "\x00" + e.SessionID
+	return Key(e.Host, e.SessionID)
+}
+
+// Key builds the identifier for a session on a host.
+//
+// The two halves are percent-encoded and joined with "/", which is not
+// decoration. The key is rendered into an HTML attribute in the panel and
+// posted back when a row is clicked, so it has to survive that trip. v0.1.0
+// joined them with a NUL byte — chosen because neither half can contain one —
+// and html/template replaces NUL with U+FFFD, as does the HTML5 tokenizer. The
+// key coming back therefore never matched the one the registry held, and every
+// click answered "that session is no longer being reported".
+//
+// url.QueryEscape leaves only ASCII that an attribute, a form body and a URL
+// all carry unchanged, and escapes "/" itself, so the join stays unambiguous
+// whatever a host alias or a session id contains.
+func Key(host, sessionID string) string {
+	return url.QueryEscape(host) + "/" + url.QueryEscape(sessionID)
 }
 
 // Validate reports whether the event carries the fields everything else relies

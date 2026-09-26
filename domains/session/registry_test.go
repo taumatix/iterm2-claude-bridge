@@ -45,7 +45,7 @@ func TestRegistryReportsNoChangeForAStatusThatDidNotChange(t *testing.T) {
 	assert.False(t, r.Apply(event("box", "s1", session.StatusWorking, 2)))
 
 	// Still recorded, so a later event is not mistaken for an older one.
-	got, ok := r.Lookup("box\x00s1")
+	got, ok := r.Lookup(session.Key("box", "s1"))
 	require.True(t, ok)
 	assert.Equal(t, base.Add(2*time.Second), got.Since)
 }
@@ -58,7 +58,7 @@ func TestRegistryIgnoresAnEventOlderThanWhatItHolds(t *testing.T) {
 
 	assert.False(t, r.Apply(event("box", "s1", session.StatusWorking, 5)))
 
-	got, _ := r.Lookup("box\x00s1")
+	got, _ := r.Lookup(session.Key("box", "s1"))
 	assert.Equal(t, session.StatusIdle, got.Status, "the older event must not win")
 }
 
@@ -75,7 +75,7 @@ func TestRegistryKeepsTmuxAndCwdWhenALaterEventOmitsThem(t *testing.T) {
 
 	require.True(t, r.Apply(event("box", "s1", session.StatusIdle, 1)))
 
-	got, _ := r.Lookup("box\x00s1")
+	got, _ := r.Lookup(session.Key("box", "s1"))
 	assert.Equal(t, "build", got.Tmux.Session)
 	assert.Equal(t, "/srv/app", got.Cwd)
 	assert.True(t, got.Attachable())
@@ -151,11 +151,11 @@ func TestForgetRemovesOneSession(t *testing.T) {
 	r := session.NewRegistry()
 	require.True(t, r.Apply(event("box", "s1", session.StatusGone, 0)))
 
-	r.Forget("box\x00s1")
+	r.Forget(session.Key("box", "s1"))
 	assert.Empty(t, r.Sessions())
 
 	// Forgetting something already gone is harmless.
-	r.Forget("box\x00s1")
+	r.Forget(session.Key("box", "s1"))
 }
 
 func TestChangedIsClosedOnAVisibleChangeOnly(t *testing.T) {
@@ -184,7 +184,7 @@ func TestChangedIsWokenByForget(t *testing.T) {
 	require.True(t, r.Apply(event("box", "s1", session.StatusGone, 0)))
 
 	waiter := r.Changed()
-	r.Forget("box\x00s1")
+	r.Forget(session.Key("box", "s1"))
 
 	select {
 	case <-waiter:
@@ -228,7 +228,7 @@ func TestRegistryIsSafeUnderConcurrentUse(t *testing.T) {
 	go func() {
 		for range 400 {
 			_ = r.Sessions()
-			_, _ = r.Lookup("a\x00s1")
+			_, _ = r.Lookup(session.Key("a", "s1"))
 			_ = r.Changed()
 		}
 		done <- struct{}{}

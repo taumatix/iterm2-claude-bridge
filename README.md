@@ -7,11 +7,13 @@ and opens a tab that SSHes in and attaches when you click one.
 
 [![CI](https://github.com/taumatix/iterm2-claude-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/taumatix/iterm2-claude-bridge/actions/workflows/ci.yml)
 
-> **Nothing here has ever talked to a real iTerm2, or to a real SSH server.** The logic is
-> covered end to end — including the hook recording a status from inside a real tmux pane — but
-> the iTerm2 and SSH edges are driven by fakes, because the machine this was built on has
-> iTerm2's API switched off and no key authorised for its own `sshd`. Read
-> [what is and is not verified](UPSTREAM.md#what-is-and-is-not-verified) before you rely on it.
+> **No automated test here talks to a real iTerm2 or a real SSH server.** The logic is covered
+> end to end — including the hook recording a status from inside a real tmux pane — but those two
+> edges are driven by fakes, because the machine this was built on has iTerm2's API switched off
+> and no key authorised for its own `sshd`. One user has run v0.1.0 against a real iTerm2, which
+> is how the bug that stopped every click being served was found; what that run settled and what
+> it did not is in [what is and is not verified](UPSTREAM.md#what-is-and-is-not-verified). Read it
+> before you rely on this.
 
 ## How it works
 

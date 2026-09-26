@@ -147,6 +147,30 @@ func TestTmuxTargetZeroMeansNothingToAttachTo(t *testing.T) {
 	assert.False(t, session.TmuxTarget{Session: "build"}.Zero())
 }
 
+func TestKeysStayDistinctWhenAHostOrSessionContainsTheSeparator(t *testing.T) {
+	// Percent-encoding each half is what makes the join unambiguous. Joining the
+	// raw strings would give both of these "a/b/c", and a click on one would
+	// reveal the other.
+	assert.NotEqual(t, session.Key("a", "b/c"), session.Key("a/b", "c"))
+
+	// An ordinary host and session id are left alone, so a key stays readable in
+	// a log and in the page source.
+	assert.Equal(t, "build-box/s1", session.Key("build-box", "s1"))
+}
+
+func TestAKeyIsSafeToPutInAnHTMLAttributeAndAURL(t *testing.T) {
+	// The panel renders the key into an attribute and posts it back, so anything
+	// an HTML parser or a URL would rewrite must not reach it. A NUL byte is the
+	// one that mattered: html/template turns it into U+FFFD, which is what broke
+	// every click in v0.1.0.
+	key := session.Key("box \"one\" & <two>", "sess\x00id\n")
+	require.Contains(t, key, "%", "nothing was escaped, so this proves nothing")
+	for _, r := range key {
+		assert.True(t, r < 0x80, "non-ASCII %q in key %q", r, key)
+		assert.NotContains(t, "<>&\"'\x00\n\t ", string(r), "%q survives into the key", r)
+	}
+}
+
 func TestParseStatus(t *testing.T) {
 	got, err := session.ParseStatus("waiting")
 	require.NoError(t, err)
