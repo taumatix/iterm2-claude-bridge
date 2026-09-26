@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Linux is where most remote hosts are, and macOS is where the watcher runs.
+    # Neither job needs iTerm2 or a reachable SSH host: the suite drives a real
+    # tmux, the real binary and a real shell, and fakes the two edges that leave
+    # the machine.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install tmux
+        # The tmux tests skip themselves when it is absent, which would quietly
+        # lose the only coverage of the pane lookup — so it is installed rather
+        # than hoped for.
+        run: |
+          if command -v tmux >/dev/null 2>&1; then
+            tmux -V
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y tmux
+          else
+            brew install tmux
+          fi
+
+      - name: Confirm tmux is present
+        # A skipped test looks the same as a passing one in the summary.
+        run: tmux -V
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Report coverage
+        run: go tool cover -func=coverage.out | tail -1
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt'd:"
+            echo "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: go mod tidy is committed
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Build the command
+        run: go build ./cmd/...
