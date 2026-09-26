@@ -93,7 +93,9 @@ func (l SSHLauncher) Start(ctx context.Context, host string) (io.ReadCloser, fun
 
 	// Drained in the background, because a full stderr pipe would block the
 	// remote's writes and stall the stream.
+	drained := make(chan struct{})
 	go func() {
+		defer close(drained)
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			if l.Log != nil {
@@ -102,7 +104,21 @@ func (l SSHLauncher) Start(ctx context.Context, host string) (io.ReadCloser, fun
 		}
 	}()
 
-	return stdout, cmd.Wait, nil
+	// cmd.Wait closes the pipes from StderrPipe as soon as the process has exited,
+	// so calling it straight away races this drain and can discard what ssh wrote
+	// on its way out. That is the one case the draining exists for: an unreachable
+	// host prints "no route to host" and exits immediately, and losing it leaves an
+	// unreachable host looking like a quiet one.
+	//
+	// Waiting for the drain first cannot deadlock: the write end in this process is
+	// closed by exec after Start, so the scanner reaches EOF when the child exits —
+	// which is what cmd.Wait was going to block on anyway.
+	wait := func() error {
+		<-drained
+		return cmd.Wait()
+	}
+
+	return stdout, wait, nil
 }
 
 // Watcher keeps a registry up to date from a set of hosts.

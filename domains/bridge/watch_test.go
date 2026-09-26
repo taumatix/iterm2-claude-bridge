@@ -310,7 +310,15 @@ func TestSSHLauncherForwardsRemoteStderrToTheLog(t *testing.T) {
 	_, _ = io.ReadAll(stdout)
 	_ = wait()
 
-	waitFor(t, "stderr to reach the log", seen.Load)
+	// Asserted outright rather than waited for: wait() returning is the guarantee
+	// that stderr has been drained, so polling here would hide the bug this test
+	// exists for instead of failing on it.
+	//
+	// It used to poll, and it passed on the machine that wrote it and on macOS CI
+	// while failing on Linux — because cmd.Wait closes the stderr pipe the moment
+	// the process exits, and whether the drain won that race was up to the
+	// scheduler. A 5-second poll cannot fix a line that was thrown away.
+	assert.True(t, seen.Load(), "ssh wrote to stderr and it never reached the log")
 }
 
 // writerFunc adapts a function to io.Writer.

@@ -49,6 +49,25 @@ a tab that SSHes in and attaches to their tmux session.
   program and the host silently never reported.
 - The event log is `0600` inside a `0700` directory.
 
+### Fixed before release
+
+Two bugs that a green local suite hid and CI found, each on one platform only. Both were real, not
+flaky tests: the suite passed on the machine that wrote it because of how that machine happened to
+schedule, and which test failed was a property of the scheduler rather than of the bug.
+
+- **A status change arriving while a watcher connected was dropped.** `stream` read the log to build
+  its replay and then took the file size to decide where to follow from, so a hook firing between
+  those two steps was past the replay and behind the offset — reported by neither, with nothing
+  recording that anything was missed. `Store.Snapshot` now returns the state and the offset it read
+  up to from one read, so following starts exactly where the replay stopped: no gap, and no
+  double-reporting either. Found as a macOS CI failure in the corrupt-line test, which had nothing
+  to do with corrupt lines.
+- **`ssh`'s error output could be discarded exactly when there was some.** `cmd.Wait` closes the pipe
+  from `StderrPipe` as soon as the process exits, which raced the goroutine draining it. An
+  unreachable host prints `no route to host` and exits immediately — the one case the draining
+  exists for — so the diagnostic was lost and the host looked quiet rather than unreachable. Waiting
+  for the drain before `Wait` is what fixes it. Found as a Linux CI failure.
+
 ### Known limitations
 
 - **Nothing here has talked to a real iTerm2 or a real SSH server.** The logic is covered end to

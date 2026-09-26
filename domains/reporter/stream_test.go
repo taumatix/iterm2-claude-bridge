@@ -124,6 +124,38 @@ func TestStreamDoesNotReSendWhatItAlreadyReplayed(t *testing.T) {
 	assert.Len(t, out.events(t), 1, "the replayed event should not be sent again")
 }
 
+// TestStreamDoesNotLoseAnEventAppendedDuringTheReplay pins the bug that cost this
+// change a red CI: a hook firing while the replay is being read was past the
+// replay's view of the file and behind the offset taken after it finished, so
+// neither step reported it and nothing said so.
+//
+// Every watcher connecting to a busy host hit that window. It surfaced as one
+// macOS job failing a suite that was green on the machine that wrote it, and as a
+// *different* test — the corrupt-line one — because which test loses a race is a
+// property of the scheduler, not of the bug. The seam replaces the race with the
+// exact interleaving.
+func TestStreamDoesNotLoseAnEventAppendedDuringTheReplay(t *testing.T) {
+	store := newStore(t)
+	require.NoError(t, store.Append(ev("already-there", session.StatusWaiting, 0)))
+
+	stream := &reporter.Stream{Store: store, PollInterval: 10 * time.Millisecond}
+	stream.SetAfterReplayForTest(func() {
+		// Exactly the window: the replay has been written, following has not begun.
+		require.NoError(t, store.Append(ev("during-replay", session.StatusWorking, 1)))
+	})
+
+	out := runStream(t, stream)
+
+	got := waitForEvents(t, out, 2)
+	ids := make([]string, 0, len(got))
+	for _, e := range got {
+		ids = append(ids, e.SessionID)
+	}
+	assert.Contains(t, ids, "during-replay",
+		"an event appended during the replay was never reported")
+	assert.Equal(t, "already-there", got[0].SessionID, "the replay should still come first")
+}
+
 func TestStreamSkipsACorruptLineWithoutEndingTheWatch(t *testing.T) {
 	// A killed hook process leaves a partial write. Ending the stream would take
 	// every other session on that host down with it.

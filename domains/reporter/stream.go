@@ -38,6 +38,12 @@ type Stream struct {
 	// meaning beyond keeping an idle SSH connection from being reaped by a firewall
 	// that sees no traffic. Zero disables it.
 	Heartbeat time.Duration
+
+	// afterReplay runs once, after the replay has been written and before the
+	// follow loop starts. Only a test sets it: it makes the window between those
+	// two steps an exact place to append an event, which is where events used to be
+	// lost and is otherwise only reachable by losing a race.
+	afterReplay func()
 }
 
 func (s *Stream) pollInterval() time.Duration {
@@ -51,9 +57,16 @@ func (s *Stream) pollInterval() time.Duration {
 //
 // It returns nil on cancellation, because being told to stop is not a failure.
 func (s *Stream) Run(ctx context.Context, w io.Writer) error {
-	// Replayed first, so a watcher that has just connected sees every session
-	// immediately rather than only those that change from now on.
-	replay, err := s.Store.Replay()
+	// The replay and the point to follow from come from one read, so that following
+	// starts exactly where the replay stopped.
+	//
+	// Measuring the size separately is wrong whichever side of the replay it goes:
+	// after it loses any event appended while the log was being read, before it
+	// reports those events twice. Snapshot returns where reading actually stopped.
+	//
+	// Replayed first in the output, so a watcher that has just connected sees every
+	// session immediately rather than only those that change from now on.
+	replay, offset, err := s.Store.Snapshot()
 	if err != nil {
 		return err
 	}
@@ -68,11 +81,8 @@ func (s *Stream) Run(ctx context.Context, w io.Writer) error {
 		return fmt.Errorf("reporter: writing the replay: %w", err)
 	}
 
-	// Following starts from the end of the file as it was when the replay was
-	// taken, so nothing is sent twice.
-	offset, err := s.size()
-	if err != nil {
-		return err
+	if s.afterReplay != nil {
+		s.afterReplay()
 	}
 
 	ticker := time.NewTicker(s.pollInterval())

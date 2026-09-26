@@ -113,41 +113,76 @@ func (s *Store) Append(e session.Event) error {
 // A line that will not parse is skipped rather than fatal: one truncated write
 // from a killed hook process must not make every session invisible.
 func (s *Store) Replay() ([]session.Event, error) {
-	events, err := s.readAll()
-	if err != nil {
-		return nil, err
-	}
-	return latestPerSession(events), nil
+	events, _, err := s.Snapshot()
+	return events, err
 }
 
-// readAll parses every line in the log, skipping what it cannot read.
-func (s *Store) readAll() ([]session.Event, error) {
+// Snapshot is [Store.Replay] plus the offset in the log that the state was read
+// up to.
+//
+// A reader that wants to replay the current state and then follow the log needs
+// both from one read. Taking the size separately is wrong in both directions, and
+// each way costs something different:
+//
+//   - Sizing *after* the replay loses events. A hook firing while the log is being
+//     read is past the replay's view of it and behind the offset, so neither
+//     reports it and nothing records that anything was missed.
+//   - Sizing *before* the replay double-reports them, because the replay reads on
+//     past the mark and following then starts behind where it finished.
+//
+// The offset returned here is where reading actually stopped, so following from it
+// neither skips nor repeats. It counts only complete lines: a trailing write still
+// in progress is excluded, leaving the offset before it so it is read whole once
+// it is finished.
+func (s *Store) Snapshot() ([]session.Event, int64, error) {
+	events, consumed, err := s.readAll()
+	if err != nil {
+		return nil, 0, err
+	}
+	return latestPerSession(events), consumed, nil
+}
+
+// readAll parses every line in the log, skipping what it cannot read, and reports
+// how many bytes of complete lines it consumed.
+//
+// Lines are read with ReadBytes rather than a Scanner so that "a complete line" is
+// decided the same way here and in Stream.follow, and so the byte count is exact.
+// A Scanner reads ahead, which makes the file position say nothing about how much
+// has been consumed, and its token limit would turn one long cwd into an error
+// that hides every line after it.
+func (s *Store) readAll() ([]session.Event, int64, error) {
 	f, err := os.Open(s.Path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// No hook has fired yet. An empty history, not a problem.
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, fmt.Errorf("reporter: opening %s: %w", s.Path, err)
+		return nil, 0, fmt.Errorf("reporter: opening %s: %w", s.Path, err)
 	}
 	defer f.Close()
 
 	var events []session.Event
-	scanner := bufio.NewScanner(f)
-	// A cwd can be long, and the default 64 KiB token limit would turn one huge
-	// line into a scan error that hides every line after it.
-	scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
-	for scanner.Scan() {
-		e, err := session.DecodeEvent(scanner.Bytes())
+	var consumed int64
+	reader := bufio.NewReader(f)
+	for {
+		line, err := reader.ReadBytes('\n')
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				// Either nothing left, or a line without its newline: a write still in
+				// progress, which is deliberately not counted.
+				break
+			}
+			return nil, 0, fmt.Errorf("reporter: reading %s: %w", s.Path, err)
+		}
+		consumed += int64(len(line))
+
+		e, decodeErr := session.DecodeEvent(line)
+		if decodeErr != nil {
 			continue
 		}
 		events = append(events, e)
 	}
-	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reporter: reading %s: %w", s.Path, err)
-	}
-	return events, nil
+	return events, consumed, nil
 }
 
 // latestPerSession keeps the newest event for each session, in time order.
@@ -191,7 +226,7 @@ func (s *Store) compactIfLarge() error {
 		return nil
 	}
 
-	events, err := s.readAll()
+	events, _, err := s.readAll()
 	if err != nil {
 		return err
 	}
