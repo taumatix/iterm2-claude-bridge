@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-26
+
 ### Fixed
 
 - **Clicking a row never opened anything.** Every click answered "that session is no longer being
@@ -101,9 +103,11 @@ schedule, and which test failed was a property of the scheduler rather than of t
   tracks it.
 - Remote sessions appear in a second toolbelt panel beside iTerm2's own rather than in one
   combined list, because iTerm2 documents no way for a third party to contribute rows
-  (`ROADMAP.md` entry 2).
+  (`ROADMAP.md` entry 4 — it was entry 2 when this was written; the roadmap was reordered in
+  0.1.1).
 - A session's status is only as fresh as the last hook that fired. If Claude is killed or the
-  machine sleeps, the row keeps saying "working" (`ROADMAP.md` entry 3).
+  machine sleeps, the row keeps saying "working" (`ROADMAP.md` entry 5, was entry 3).
 
-[Unreleased]: https://github.com/taumatix/iterm2-claude-bridge/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/taumatix/iterm2-claude-bridge/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/taumatix/iterm2-claude-bridge/releases/tag/v0.1.1
 [0.1.0]: https://github.com/taumatix/iterm2-claude-bridge/releases/tag/v0.1.0
