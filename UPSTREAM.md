@@ -151,12 +151,20 @@ unrefreshed pin cannot hide.
 
 - name: openssh
   kind: cli
+  version: "10.3p1"
   checked: 2026-09-26
   note: >-
     `ssh` is invoked, never linked. Host names are passed through untouched so the
     user's ~/.ssh/config decides the login name, port, jump host and identity.
     BatchMode=yes, ServerAliveInterval and ServerAliveCountMax are set; `-t` is
-    requested for attach and withheld for the stream.
+    requested for attach and withheld for the stream. Two behaviours read from
+    ssh(1) on 2026-09-26 after a user hit both: "If supplied, the arguments will
+    be appended to the command, separated by spaces, before it is sent to the
+    server to be executed" — so a `;` arriving as its own argument reaches the
+    remote shell bare, whatever quoting put it there — and the server "executes
+    the given command in a non-interactive session", whose PATH commonly lacks a
+    tmux under /opt/homebrew/bin, which is why the reporter sends the path it
+    resolved.
   hold: >-
     not verified against a real SSH server by any automated run. The tests drive a
     real subprocess, which is what ssh is to this program, and a stub ssh for the
@@ -182,6 +190,14 @@ through the built binary. The shell quoting, by running the command this program
 builds through a real `/bin/sh` with a stub `tmux` that reports exactly what it
 received — which is how the missing quotes around tmux's `;` separator were found,
 after a string-level test had blessed the broken version.
+
+That quoting check ran against **one** shell until 2026-09-26, and there are two.
+iTerm2 parses a profile's Command before ssh exists, so the quoting meant for the
+remote shell was consumed locally and a session name containing `$(…)` ran on the
+Mac. The check now starts from the string iTerm2 is given and goes through both —
+the local shell, then a stub ssh that joins its arguments as ssh(1) says it does,
+then the remote shell. Starting a test one layer in is how a real injection sat
+under a green suite for three releases.
 
 **Established by one real run, not by a test.** A user ran v0.1.0 against a real
 iTerm2 on 2026-09-26 and reported that clicking a row said "that session is no

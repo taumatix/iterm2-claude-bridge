@@ -562,11 +562,15 @@ func TestAnOrdinaryQuoteInATmuxNameIsStillAttachable(t *testing.T) {
 	code, body := postOpen(t, p, key, tokenFrom(t, p))
 	require.Equal(t, http.StatusOK, code, body)
 
-	// Decoded from the JSON the profile property carries, so the assertion is
-	// about the command iTerm2 runs rather than about JSON's own escaping.
+	// That it is attachable is the claim here. Whether the name survives the two
+	// shells between this and tmux byte for byte is settled in quoting_test.go,
+	// by real shells, rather than by matching a quoted string here — the shape of
+	// that string changed the moment a second layer of quoting was added, and an
+	// assertion that has to be rewritten when the encoding changes was never
+	// testing the behaviour.
 	var command string
 	require.NoError(t, json.Unmarshal([]byte(term.lastCreateCommand(t)), &command))
-	assert.Contains(t, command, `'it'\''s work'`)
+	assert.Contains(t, command, "attach-session")
 }
 
 func TestTagsStayDistinctWhenAHostOrTmuxNameContainsASlash(t *testing.T) {

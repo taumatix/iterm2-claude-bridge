@@ -117,6 +117,12 @@ opened can be found again*.
 it starts. Without that a `SSH_AUTH_SOCK` you export from a dotfile is missing and key
 authentication fails in the new tab while working everywhere else.
 
+On the far side there is no login shell: ssh runs the attach command in a non-interactive
+session, whose `PATH` often has no `/opt/homebrew/bin`. So the remote half reports where its tmux
+is — it runs inside the pane, where tmux is on the `PATH` by definition — and the Mac invokes
+that path. A remote host running a build older than v0.1.3 sends no path, and you get
+`command not found: tmux` until you upgrade it.
+
 A tmux session whose name contains `\(` cannot be clicked: iTerm2 evaluates a profile's command
 as an interpolated string before running it, so that sequence would run an iTerm2 expression
 rather than reaching the shell. Renaming the session is the fix.

@@ -54,11 +54,21 @@ type TmuxResolver struct {
 
 	// Env reads an environment variable. Defaults to os.Getenv.
 	Env func(string) string
+
+	// LookPath resolves a program on PATH. Defaults to exec.LookPath.
+	LookPath func(string) (string, error)
 }
 
 // NewTmuxResolver returns a resolver driving the real tmux.
 func NewTmuxResolver() *TmuxResolver {
-	return &TmuxResolver{Runner: ExecRunner{}, Env: os.Getenv}
+	return &TmuxResolver{Runner: ExecRunner{}, Env: os.Getenv, LookPath: exec.LookPath}
+}
+
+func (r *TmuxResolver) lookPath(name string) (string, error) {
+	if r.LookPath != nil {
+		return r.LookPath(name)
+	}
+	return exec.LookPath(name)
 }
 
 func (r *TmuxResolver) env(name string) string {
@@ -112,6 +122,16 @@ func (r *TmuxResolver) Resolve(ctx context.Context) (session.TmuxTarget, error) 
 	}
 	if target.Session == "" {
 		return session.TmuxTarget{}, fmt.Errorf("reporter: tmux reported no session name for pane %s", pane)
+	}
+
+	// Where tmux is, resolved here because here is where it is on the PATH. The
+	// far side runs its attach over ssh, in a non-interactive session that often
+	// cannot find a tmux under /opt/homebrew/bin or /usr/local/bin.
+	//
+	// A failure is not an error: the pane was resolved, so the row is attachable,
+	// and the far side falls back to the bare name — which is all it ever had.
+	if binary, err := r.lookPath("tmux"); err == nil {
+		target.Binary = binary
 	}
 	return target, nil
 }

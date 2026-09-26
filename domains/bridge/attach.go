@@ -75,12 +75,34 @@ func (o SSHOptions) AttachCommand(host string, target session.TmuxTarget) (strin
 	// user on the pane Claude is in rather than wherever the session was last
 	// left.
 	//
-	// The separator is quoted because this string is parsed by a shell first: bare,
-	// the shell consumes it and tries to run `attach-session` as its own command,
-	// which selects the window and then fails with "command not found". Asserting
-	// the built string cannot catch that — only running it through a real shell can,
-	// which is what quoting_test.go does.
-	remote := []string{"tmux"}
+	// The separator is quoted because this string is parsed by a shell: bare, the
+	// shell consumes it and tries to run `attach-session` as its own command,
+	// which selects the window and then fails with "command not found".
+	//
+	// One quoting is not enough, and believing it was is how that failure reached
+	// a user anyway. This string is also carried inside the command iTerm2 runs,
+	// which iTerm2 parses before ssh exists — so the quotes added here were
+	// stripped there and never reached the remote shell at all. [TabCommand]
+	// quotes for that layer. Asserting the built string catches neither; running
+	// it through both real shells, as quoting_test.go does, catches both.
+	//
+	// The tmux the remote reporter actually used, when it said. ssh runs the
+	// remote command in a non-interactive session — ssh(1): "executes the given
+	// command in a non-interactive session" — and that session's PATH commonly
+	// lacks a tmux under /opt/homebrew/bin or /usr/local/bin, which is a plain
+	// "command not found: tmux". The reporter runs inside the pane, where tmux is
+	// on the PATH, so it is the half that can answer. An older remote build sends
+	// nothing and the bare name is used, exactly as before.
+	//
+	// Using the same binary is also the safer attach: tmux refuses a client whose
+	// protocol version differs from the server's, so the one that owns the pane is
+	// the one to run.
+	tmux := target.Binary
+	if tmux == "" {
+		tmux = "tmux"
+	}
+
+	remote := []string{tmux}
 	if target.Window != "" {
 		remote = append(remote, "select-window", "-t", target.Window, ";")
 	}
@@ -93,4 +115,27 @@ func (o SSHOptions) AttachCommand(host string, target session.TmuxTarget) (strin
 		shellquote.Words(remote...),
 	)
 	return o.program(), args, nil
+}
+
+// TabCommand renders the attach command as the one string iTerm2 is given for a
+// new tab's profile.
+//
+// It quotes, and that is the whole point. iTerm2 does not exec this: it parses
+// it first, either with -componentsInShellCommand or — with "Run Command In
+// Login Shell" set — by handing it to the login shell as `-i -c <command>`.
+// Either way a shell-shaped parse happens before ssh exists, and joining the
+// arguments with spaces let it eat the quotes around tmux's `;` separator. ssh
+// then received `;` as an argument of its own and appended it to the remote
+// command "separated by spaces" (ssh(1)), so the remote shell read it as a
+// command separator: tmux ran with select-window only and `attach-session`
+// became a program nobody could find.
+//
+// So there are two shells to quote for, not one. AttachCommand quotes for the
+// remote; this quotes for the local one, around the result.
+func (o SSHOptions) TabCommand(host string, target session.TmuxTarget) (string, error) {
+	program, args, err := o.AttachCommand(host, target)
+	if err != nil {
+		return "", err
+	}
+	return shellquote.Words(append([]string{program}, args...)...), nil
 }

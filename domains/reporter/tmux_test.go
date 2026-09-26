@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -63,6 +64,40 @@ func TestResolveAsksAboutTheHooksOwnPane(t *testing.T) {
 	call := strings.Join(runner.calls[0], " ")
 	assert.Contains(t, call, "-t %7", "the pane from TMUX_PANE must be the target")
 	assert.Contains(t, call, "display-message")
+}
+
+func TestResolveRecordsWhereTmuxIs(t *testing.T) {
+	// The far side attaches over ssh, in a non-interactive session whose PATH
+	// often has no /opt/homebrew/bin — so it cannot find tmux and says so. Here,
+	// inside the pane, tmux is on the PATH by definition.
+	runner := &fakeRunner{stdout: "build|@3|%7"}
+	r := &reporter.TmuxResolver{
+		Runner:   runner,
+		Env:      envFrom(map[string]string{"TMUX": "set", "TMUX_PANE": "%7"}),
+		LookPath: func(string) (string, error) { return "/opt/homebrew/bin/tmux", nil },
+	}
+
+	target, err := r.Resolve(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "/opt/homebrew/bin/tmux", target.Binary)
+}
+
+func TestResolveStillReportsAPaneWhenTmuxCannotBeLocated(t *testing.T) {
+	// The pane was resolved, so the row is attachable. The far side falls back to
+	// the bare name, which is all it ever had — losing the row instead would be a
+	// worse answer than the one that worked before.
+	runner := &fakeRunner{stdout: "build|@3|%7"}
+	r := &reporter.TmuxResolver{
+		Runner:   runner,
+		Env:      envFrom(map[string]string{"TMUX": "set", "TMUX_PANE": "%7"}),
+		LookPath: func(string) (string, error) { return "", errors.New("not on PATH") },
+	}
+
+	target, err := r.Resolve(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, target.Binary)
+	assert.Equal(t, "build", target.Session)
+	assert.False(t, target.Zero())
 }
 
 func TestResolveFailsWhenTmuxDoesNotKnowThePane(t *testing.T) {
@@ -156,6 +191,14 @@ func TestResolveAgainstRealTmux(t *testing.T) {
 	assert.True(t, strings.HasPrefix(target.Window, "@"), "window id %q should start with @", target.Window)
 	assert.True(t, strings.HasPrefix(target.Pane, "%"), "pane id %q should start with %%", target.Pane)
 	assert.False(t, target.Zero())
+
+	// The path the far side will run over ssh, resolved here against the real
+	// PATH — and it must be the tmux that actually owns this pane, since tmux
+	// refuses a client whose protocol version differs from its server's.
+	wanted, err := exec.LookPath("tmux")
+	require.NoError(t, err)
+	assert.Equal(t, wanted, target.Binary)
+	assert.True(t, filepath.IsAbs(target.Binary), "%q should be absolute", target.Binary)
 }
 
 func TestExecRunnerReportsStderrFromAFailedCommand(t *testing.T) {
