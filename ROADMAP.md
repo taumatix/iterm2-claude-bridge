@@ -144,6 +144,14 @@ cancelling the timer). Server-sent events over the same loopback server would re
 
 ## Done
 
+- **v0.1.2** — the tab opens where the user is and runs ssh with their own environment. It was
+  opening a new window, because `CreateTab` does that without a window id; it now goes in the
+  window a `FocusRequest` reports as key. And iTerm2 exec'd the ssh command directly, so no
+  dotfile ran and a `SSH_AUTH_SOCK` from `~/.zshrc` was missing; `"Run Command In Login Shell"`
+  is iTerm2's own answer to that. Reading its source for those two found a third thing: a
+  profile's Command is expression-evaluated before it is split into argv, so a remote tmux
+  session name containing `\(` ran an iTerm2 expression. Refused for now.
+
 - **v0.1.1** — clicking a row works. v0.1.0 built a session key by joining its two halves with a
   NUL byte, which `html/template` turns into U+FFFD on the way into the row's attribute, so the
   key posted back never matched and every click answered "that session is no longer being
