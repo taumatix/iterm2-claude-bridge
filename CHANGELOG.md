@@ -6,6 +6,45 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **A tmux session name from a remote host could run commands on the Mac.** The command string
+  handed to iTerm2 was assembled by joining arguments with spaces, and iTerm2 parses that string
+  with a shell before `ssh` is executed — with `-componentsInShellCommand`, or, since 0.1.2, by
+  handing it to the login shell as `-i -c`. The remote half of the command was quoted for the
+  *remote* shell, and that quoting is exactly what the local parse consumed. A session named
+  `$(…)` was therefore expanded on the Mac, before ssh ran. Present since 0.1.0.
+
+  Both layers are now quoted, and a test drives the command through two real shells — the local
+  one and, behind a stub ssh that joins its arguments the way ssh(1) documents, the remote one —
+  asserting tmux receives the name as one argument and that a `$(touch …)` in it creates no file.
+
+  The single-shell test that has guarded this since 0.1.0 passed throughout, because it started
+  from the remote half and never saw the first parse.
+
+### Fixed
+
+- **`command not found: attach-session`.** Same cause: the quotes around tmux's `;` separator were
+  eaten by that first parse, so ssh received `;` as an argument of its own and appended it to the
+  remote command "separated by spaces" (ssh(1)). The remote shell then read it as a command
+  separator, ran `tmux select-window …`, and looked for a program called `attach-session`.
+
+- **`command not found: tmux`.** ssh runs the remote command in a non-interactive session, whose
+  PATH commonly has no `/opt/homebrew/bin` or `/usr/local/bin`. The reporter runs inside the tmux
+  pane, where tmux is on the PATH by definition, so it now resolves the absolute path and sends it
+  in the event; the Mac invokes that rather than the bare name. It is also the safer attach, since
+  tmux refuses a client whose protocol version differs from its server's.
+
+  **This half needs the remote side upgraded too.** A remote still on 0.1.2 sends no path and the
+  Mac falls back to the bare name, exactly as before.
+
+### Added
+
+- `TmuxTarget.Binary` on the wire (`binary`), the absolute path of the tmux that owns the pane.
+  Optional and ignored by older builds, per the forward-compatibility rules on `Event`.
+- `SSHOptions.TabCommand`, which renders the attach command as the single string iTerm2 is given,
+  quoted for the shell that parses it. `AttachCommand` is unchanged.
+
 ## [0.1.2] - 2026-09-26
 
 ### Fixed

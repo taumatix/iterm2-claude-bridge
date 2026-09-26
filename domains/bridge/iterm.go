@@ -158,11 +158,10 @@ func (o *Opener) findTagged(ctx context.Context, tag string) (string, error) {
 
 // openTab creates a tab running the ssh command and tags it.
 func (o *Opener) openTab(ctx context.Context, s session.Session, tag string) (string, bool, error) {
-	program, args, err := o.SSH.AttachCommand(s.Host, s.Tmux)
+	command, err := o.SSH.TabCommand(s.Host, s.Tmux)
 	if err != nil {
 		return "", false, err
 	}
-	command := program + " " + strings.Join(args, " ")
 	if err := refuseExpressionSyntax(command); err != nil {
 		return "", false, err
 	}

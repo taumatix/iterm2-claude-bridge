@@ -68,6 +68,19 @@ type TmuxTarget struct {
 	// "%7"), so they can be passed straight back to tmux as a target.
 	Window string `json:"window,omitempty"`
 	Pane   string `json:"pane,omitempty"`
+
+	// Binary is the absolute path of the tmux that owns this pane, as resolved on
+	// the machine it runs on.
+	//
+	// It is carried because the two halves see different PATHs. ssh runs the
+	// attach command in a non-interactive session, whose PATH commonly lacks a
+	// tmux installed under /opt/homebrew/bin or /usr/local/bin — the remote shell
+	// then answers "command not found: tmux". The reporter runs inside the pane,
+	// where tmux is on the PATH by definition, so it is the half that knows.
+	//
+	// Empty when it could not be resolved, and from a remote build that predates
+	// the field; the local half then falls back to the bare name.
+	Binary string `json:"binary,omitempty"`
 }
 
 // Zero reports whether no tmux session was found.

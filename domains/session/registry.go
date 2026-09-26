@@ -87,6 +87,14 @@ func (r *Registry) Apply(e Event) (changed bool) {
 	if next.Tmux.Zero() {
 		next.Tmux = existing.Tmux
 	}
+	// The same argument one field down: an event from a build predating
+	// TmuxTarget.Binary carries no path, and letting it erase one an earlier
+	// event established would put the row back to guessing "tmux" on a host whose
+	// non-interactive PATH cannot find it. An event log can hold both, because
+	// the remote is upgraded under a stream that replays what is already there.
+	if next.Tmux.Binary == "" {
+		next.Tmux.Binary = existing.Tmux.Binary
+	}
 	if next.Cwd == "" {
 		next.Cwd = existing.Cwd
 	}

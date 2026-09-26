@@ -19,7 +19,9 @@ rather than a plain shell, and `ssh` itself runs from a tab iTerm2 spawned.
 What no run has reported either way:
 
 - Whether `tmux select-window -t @N ';' attach-session -t name` behaves over `ssh -t` the way it
-  does locally — the user lands somewhere, but nobody has said whether it is the pane Claude is in.
+  does locally. A third run reached it and it failed, but for a reason on this side of the wire:
+  the `;` lost its quoting to a shell layer the tests did not know about, fixed in v0.1.3. Whether
+  it then lands on the pane Claude is in is still unreported.
 - Whether reading `user.iterm2ClaudeBridge` on every session is fast enough to click through, or
   wants the per-session round trips replacing.
 - Whether the three properties added on 2026-09-26 are accepted: `"Run Command In Login Shell"`,
@@ -125,6 +127,10 @@ administers that host. Unknown fields and unknown statuses are ignored rather th
 is the right default — but a user whose remote build is much older gets quietly reduced function
 with nothing saying so.
 
+This stopped being hypothetical in v0.1.3: a remote that does not send `tmux.binary` leaves the
+Mac guessing `tmux`, which is the `command not found: tmux` that release fixed. The user upgrades
+the Mac, sees no change, and has nothing telling them the other half is the stale one.
+
 A version in the stream's first line, and a warning in the panel when it is older than the
 watcher expects.
 
@@ -143,6 +149,14 @@ cancelling the timer). Server-sent events over the same loopback server would re
 `Registry.Changed()` already exists to drive them.
 
 ## Done
+
+- **v0.1.3** — what reaches tmux is what was meant. There are two shells between the panel and
+  tmux, and the quoting test only knew about the second: iTerm2 parses a profile's Command before
+  ssh exists, so the quoting meant for the remote shell was consumed locally. That broke the `;`
+  separator — `command not found: attach-session` — and, worse, expanded a remote-chosen session
+  name on the Mac, so `$(…)` in one ran here. Both layers are quoted now and the test starts from
+  the string iTerm2 is given. The reporter also sends the absolute path of its tmux, because ssh
+  runs the remote command non-interactively and that PATH commonly cannot find one.
 
 - **v0.1.2** — the tab opens where the user is and runs ssh with their own environment. It was
   opening a new window, because `CreateTab` does that without a window id; it now goes in the
