@@ -1,0 +1,19 @@
+# Test and coverage output
+coverage.out
+coverage.html
+*.test
+
+# Build output
+/bin/
+/dist/
+
+# Editor and OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Never commit credentials or local environment
+.env
+.env.*
+*.pem
