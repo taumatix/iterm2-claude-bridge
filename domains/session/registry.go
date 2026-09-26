@@ -21,7 +21,7 @@ type Session struct {
 
 // Key identifies the session, matching [Event.Key].
 func (s Session) Key() string {
-	return s.Host + "\x00" + s.SessionID
+	return Key(s.Host, s.SessionID)
 }
 
 // Attachable reports whether there is a tmux session to attach to. A Claude

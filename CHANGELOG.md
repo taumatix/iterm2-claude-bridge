@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Clicking a row never opened anything.** Every click answered "that session is no longer being
+  reported", whatever the session was doing and whether or not it was under tmux — so v0.1.0's
+  central feature did not work at all. A session key joined its host and Claude session id with a
+  NUL byte, and `html/template` replaces NUL with U+FFFD when it renders the key into the row's
+  `data-key` attribute (the HTML5 tokenizer would replace it anyway). The key posted back was
+  therefore never the key the registry held. Keys now percent-encode each half and join them with
+  `/`.
+
+  The suite missed it because every test posted a key taken straight from the registry. There is
+  now one that reads the key back out of the rendered page with an HTML5 parser before posting it,
+  which is the trip a browser actually makes.
+
+- Tab tags had the same ambiguity one layer up: host `a` with tmux session `b/c` and host `a/b`
+  with tmux session `c` both tagged a tab `a/b/c`, so a click could reveal the wrong one. Tags use
+  the same encoding now. Ordinary names are unchanged, so a tab tagged by v0.1.0 is still found.
+
+### Changed
+
+- `session.Key`, `Session.Key()` and `Event.Key()` return the new encoding. The key is an in-memory
+  identifier — it is never written to the event log or sent over the wire — so nothing on disk or
+  in flight changes, and the two halves it is built from are untouched.
+
 ## [0.1.0] - 2026-09-26
 
 First release. Shows Claude Code sessions running on remote hosts in iTerm2's toolbelt, and opens

@@ -57,8 +57,12 @@ type Opener struct {
 // Tag is the value written to [TagVariable] for a session. It identifies the
 // host and tmux session rather than the Claude session, because a tab is attached
 // to a tmux session: two Claude sessions in one tmux session share the tab.
+// It is built with the same encoding as a session key, for the same reason: the
+// two halves must not be able to run together. Host "a" with tmux session "b/c"
+// and host "a/b" with tmux session "c" are different tabs, and a tag of "a/b/c"
+// for both would activate whichever was found first.
 func Tag(host string, target session.TmuxTarget) string {
-	return host + "/" + target.Session
+	return session.Key(host, target.Session)
 }
 
 // Reveal brings up the tab for s, creating it if there is none.

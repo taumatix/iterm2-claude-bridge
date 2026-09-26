@@ -49,13 +49,38 @@ unrefreshed pin cannot hide.
     extends. Read on 2026-09-26: it installs a cc-status hook into
     ~/.claude/settings.json that reports to iTerm2 over the Python API, and shows
     local sessions in a built-in Session Status toolbelt tool with the same three
-    states this uses (working / waiting / idle).
+    states this uses (working / waiting / idle). It also ships a Workgroup, which
+    on entry creates two Peers beside the Claude session — "Chat is your main
+    Claude conversation. Diff shows a side-by-side view of your working-tree
+    changes. Code Review is a dedicated session for reviewing changes." The
+    integration uses the Python API to add Code Review findings to the
+    Workgroup's shared Clippings panel.
   hold: >-
     the page documents no extension point for a third party to report sessions into
     that built-in tool, and says nothing about remote hosts, SSH or tmux. That is
     why this registers its own panel instead. If iTerm2 ever publishes a way to
     contribute rows, one combined list would be better than two panels — see
     ROADMAP.md.
+
+- name: iterm2-workgroups
+  kind: docs
+  url: https://iterm2.com/documentation-workgroups.html
+  checked: 2026-09-26
+  note: >-
+    how the chat / diff / code-review panes of iTerm2's integration are built. A
+    Workgroup is "a set of related sessions that iTerm2 builds from a single one",
+    configured in Settings > Arrangements > Workgroups. Each Peer carries a
+    Profile, a Mode (Regular, Diff or Code Review), a Command, a Name and an
+    optional Shortcut, and its command runs when the Workgroup is entered.
+  hold: >-
+    no API. proto/api.proto at gnachman/iTerm2 master on 2026-09-26 contains no
+    message, field or enum matching "workgroup" or "peer", so a Workgroup can be
+    neither created nor entered from this program — only defined by a human in
+    Settings and reached through the profile a tab is opened with. Whether a Peer
+    Command may be an interpolated string reading the parent session's user.
+    variables is the open question that decides whether one Workgroup definition
+    can serve every remote host; the page does not say, and it has not been tried.
+    See ROADMAP.md.
 
 - name: tmux
   kind: cli
@@ -106,14 +131,31 @@ builds through a real `/bin/sh` with a stub `tmux` that reports exactly what it
 received — which is how the missing quotes around tmux's `;` separator were found,
 after a string-level test had blessed the broken version.
 
-**Not verified: anything involving iTerm2, and anything involving SSH.**
+**Established by one real run, not by a test.** A user ran v0.1.0 against a real
+iTerm2 on 2026-09-26 and reported that clicking a row said "that session is no
+longer being reported". That sentence can only be produced by the panel's own
+error box, after a `POST /open` was served and answered 404 — so reaching it
+means the toolbelt registration rendered, the web view ran the page's
+JavaScript, its `fetch` to `127.0.0.1` was allowed, the token was accepted, and
+the row carried a `data-key` and was not disabled. Four of the things ROADMAP
+entry 1 listed as unknown are therefore answered, and the fifth — the key round
+trip — was broken and is fixed in Unreleased.
 
-- **iTerm2.** No test has talked to iTerm2. The API is off until a human enables it
-  in Settings > General > Magic, and this host also denies Apple Events to its
-  shell, so even the cookie exchange cannot run. The panel and the tab-opening are
-  tested against a fake that records what was asked for. So: the profile keys are
-  read from iTerm2's source but never accepted by iTerm2; the toolbelt registration
-  is never rendered; no tab has ever been opened.
+This is inference from one reported message, not a run anyone here observed or
+can repeat. It is recorded because the alternative is to keep calling those
+parts unknown when something is now known about them, not because it is
+equivalent to a test.
+
+**Still not verified: opening a tab, and anything involving SSH.**
+
+- **iTerm2.** No test has talked to iTerm2, and the click that would have created
+  a tab never got past the lookup, so nothing has yet exercised `CreateTab`. The
+  API is off until a human enables it in Settings > General > Magic, and this
+  host also denies Apple Events to its shell, so even the cookie exchange cannot
+  run here. The panel and the tab-opening are tested against a fake that records
+  what was asked for. So the profile keys — `"Custom Command": "Yes"` and
+  `"Command"` — are read from iTerm2's source and have still never been accepted
+  by iTerm2, and no tab has ever been opened.
 - **SSH.** No test has connected to a host. `sshd` is reachable on this machine but
   has no key authorised for it, and adding one to the user's `authorized_keys` is
   not this program's business.
