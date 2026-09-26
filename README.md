@@ -103,9 +103,23 @@ Each row shows the host and working directory. Clicking one brings up its tab, o
 
 A session not running under tmux is shown but not clickable — there is nothing to attach to.
 
+The tab opens in the window you are looking at, next to the toolbelt you clicked, not in a new
+window.
+
 New tabs are tagged with an iTerm2 session variable (`user.iterm2ClaudeBridge`), so clicking the
 same row twice brings the existing tab forward rather than opening another. That survives
-restarting the bridge, because the tag is read back from iTerm2 rather than remembered.
+restarting the bridge, because the tag is read back from iTerm2 rather than remembered. A tab
+somebody *else* opened — one where you attached to the same tmux session by hand — is not
+recognised, so clicking opens a second one — [ROADMAP.md](ROADMAP.md), *Only a tab this program
+opened can be found again*.
+
+`ssh` runs through your login shell, interactively, so `~/.zshrc` and friends are sourced before
+it starts. Without that a `SSH_AUTH_SOCK` you export from a dotfile is missing and key
+authentication fails in the new tab while working everywhere else.
+
+A tmux session whose name contains `\(` cannot be clicked: iTerm2 evaluates a profile's command
+as an interpolated string before running it, so that sequence would run an iTerm2 expression
+rather than reaching the shell. Renaming the session is the fix.
 
 ## Why a second panel
 

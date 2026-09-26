@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	iterm2 "github.com/taumatix/iterm2-go"
@@ -52,6 +53,10 @@ type Opener struct {
 	// Profile names the iTerm2 profile new tabs are based on. Empty uses the
 	// default profile.
 	Profile string
+
+	// Log receives what a click could not do but carried on from. nil uses the
+	// default logger.
+	Log *slog.Logger
 }
 
 // Tag is the value written to [TagVariable] for a session. It identifies the
@@ -158,18 +163,37 @@ func (o *Opener) openTab(ctx context.Context, s session.Session, tag string) (st
 		return "", false, err
 	}
 	command := program + " " + strings.Join(args, " ")
+	if err := refuseExpressionSyntax(command); err != nil {
+		return "", false, err
+	}
 
-	// The profile keys are iTerm2's own: "Custom Command" takes the string "Yes"
-	// or "No", and "Command" is what to run. Read from iTerm2's Python library
-	// (profile.py, set_use_custom_command / set_command) rather than guessed.
-	// Values are JSON, so the strings carry their quotes.
+	// The profile keys are iTerm2's own, read from its source rather than
+	// guessed — ITAddressBookMgr.h/.m, see UPSTREAM.md:
+	//
+	//   "Custom Command"              KEY_CUSTOM_COMMAND, whose "Yes" is
+	//                                 kProfilePreferenceCommandTypeCustomValue.
+	//   "Command"                     KEY_COMMAND_LINE.
+	//   "Run Command In Login Shell"  KEY_RUN_COMMAND_IN_LOGIN_SHELL, default NO.
+	//
+	// The last one is why ssh sees the environment the user's dotfiles build.
+	// Without it iTerm2 exec's the command directly, so nothing reads ~/.zshrc
+	// and a custom SSH_AUTH_SOCK — the agent holding the user's keys — is not
+	// set. With it iTerm2 wraps the command in
+	// `/usr/bin/login -fqpl <user> ShellLauncher --launch_shell - -i -c <cmd>`,
+	// which runs the login shell interactively so the rc files are sourced.
+	// iTerm2's own comment on the equivalent path names this exact case.
+	//
+	// Values are JSON, matching ProfileProperty.json_value, so the strings carry
+	// their quotes and the boolean does not.
 	props := map[string]string{
-		"Custom Command": `"Yes"`,
-		"Command":        jsonString(command),
+		"Custom Command":             `"Yes"`,
+		"Command":                    jsonString(command),
+		"Run Command In Login Shell": "true",
 	}
 
 	tab, err := o.Terminal.CreateTab(ctx, iterm2.CreateTabOptions{
 		ProfileName:             o.Profile,
+		WindowID:                o.currentWindow(ctx),
 		CustomProfileProperties: props,
 	})
 	if err != nil {
@@ -183,6 +207,76 @@ func (o *Opener) openTab(ctx context.Context, s session.Session, tag string) (st
 		return tab.SessionID, true, fmt.Errorf("bridge: tab for %s opened but could not be tagged, so a later click will open another: %w", tag, err)
 	}
 	return tab.SessionID, true, nil
+}
+
+// currentWindow returns the iTerm2 window the user is looking at, or "" when
+// there is none — which makes [iterm2.CreateTabOptions] open a new window.
+//
+// Without it every click opened a window rather than a tab, because that is
+// what CreateTab does with no window id. The window wanted is the one whose
+// toolbelt was just clicked, and clicking makes that window key, so the
+// focus state is the answer.
+//
+// A failure to read it is logged and treated as "no window": a click that
+// opens a tab in the wrong place is a much smaller failure than a click that
+// does nothing.
+func (o *Opener) currentWindow(ctx context.Context) string {
+	resp, err := o.Terminal.Do(ctx, &apipb.ClientOriginatedMessage{
+		Submessage: &apipb.ClientOriginatedMessage_FocusRequest{
+			FocusRequest: &apipb.FocusRequest{},
+		},
+	})
+	if err != nil {
+		o.log().Warn("could not ask iTerm2 which window is in front, so opening a new one", "error", err)
+		return ""
+	}
+
+	// FocusResponse carries notifications that "completely describe the state of
+	// every tab and window". A window that is key is the one being used; one that
+	// is merely current is the fallback for when a non-terminal window has focus,
+	// which is what happens if the click arrives while something else is in front.
+	var current string
+	for _, n := range resp.GetFocusResponse().GetNotifications() {
+		w := n.GetWindow()
+		if w == nil {
+			continue
+		}
+		switch w.GetWindowStatus() {
+		case apipb.FocusChangedNotification_Window_TERMINAL_WINDOW_BECAME_KEY:
+			return w.GetWindowId()
+		case apipb.FocusChangedNotification_Window_TERMINAL_WINDOW_IS_CURRENT:
+			current = w.GetWindowId()
+		}
+	}
+	return current
+}
+
+// refuseExpressionSyntax rejects a command iTerm2 would evaluate rather than run.
+//
+// A profile's Command is an interpolated string: iTerm2 evaluates it with
+// iTermExpressionEvaluator, side effects allowed, before splitting it into
+// arguments (ITAddressBookMgr.m, computeCommandForProfile). Its parser starts an
+// expression at a backslash followed by "(" and at nothing else
+// (iTermSwiftyStringParser.m). A tmux session name is chosen on another machine,
+// and shell quoting does not help here because the evaluation happens first —
+// so a name containing `\(` would run an iTerm2 expression on this Mac.
+//
+// Refusing is the answer rather than escaping it, because getting an escape
+// right means knowing how iTerm2's expression layer and its shell tokenizer
+// compose, and nothing here can run either. A tmux session named with `\(` in
+// it loses click-to-attach; that is the cost of failing closed.
+func refuseExpressionSyntax(command string) error {
+	if strings.Contains(command, `\(`) {
+		return fmt.Errorf(`bridge: refusing to open a tab: the command contains \(, which iTerm2 evaluates as an expression instead of passing to the shell. The tmux session name is the usual source; renaming it is the fix`)
+	}
+	return nil
+}
+
+func (o *Opener) log() *slog.Logger {
+	if o.Log != nil {
+		return o.Log
+	}
+	return slog.Default()
 }
 
 // RegisterPanel asks iTerm2 to show the panel in its toolbelt.

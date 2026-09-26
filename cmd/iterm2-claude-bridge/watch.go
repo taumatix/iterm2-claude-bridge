@@ -67,7 +67,7 @@ first connection raises a permission prompt.`,
 
 			ssh := bridge.SSHOptions{Program: sshProgram, Args: sshArgs}
 			registry := session.NewRegistry()
-			opener := &bridge.Opener{Terminal: conn, SSH: ssh, Profile: profile}
+			opener := &bridge.Opener{Terminal: conn, SSH: ssh, Profile: profile, Log: log}
 
 			panel, err := bridge.NewPanel(registry, opener, log)
 			if err != nil {

@@ -39,6 +39,57 @@ unrefreshed pin cannot hide.
     set_command writes "Command". Without "Custom Command" the profile ignores
     "Command" and opens a plain shell, so a wrong key here means a tab that opens
     and does nothing.
+  hold: >-
+    the Python library is behind the application. profile.py documents "Custom
+    Command" as a Yes/No flag; ITAddressBookMgr.m (below) shows the application
+    comparing it against five values, of which "Yes" is one. It also carries no
+    setter for "Run Command In Login Shell", which the application has and this
+    program needs. Prefer the Objective-C source for a key this depends on.
+
+- name: iterm2-command-execution
+  kind: github-file
+  repo: gnachman/iTerm2
+  path: sources/Settings/Profiles/ITAddressBookMgr.m
+  ref: master
+  checked: 2026-09-26
+  note: >-
+    how a profile's Command becomes a running program, read on 2026-09-26 because
+    two v0.1.1 bugs were in it. KEY_CUSTOM_COMMAND is "Custom Command" and
+    kProfilePreferenceCommandTypeCustomValue is "Yes"; KEY_COMMAND_LINE is
+    "Command"; KEY_RUN_COMMAND_IN_LOGIN_SHELL is "Run Command In Login Shell",
+    a boolean defaulting to NO (iTermProfilePreferences.m). With it set,
+    bookmarkCommandSwiftyString wraps the command as
+    `/usr/bin/login -f[q]pl <user> ShellLauncher --launch_shell - -i -c <cmd>`,
+    which is what makes the user's dotfiles run before ssh — iTerm2's own comment
+    on the adjacent ssh path names a custom SSH_AUTH_SOCK as the case it is for.
+    computeCommandForProfile then evaluates the result as an interpolated string
+    with iTermExpressionEvaluator, side effects allowed, and the result is split
+    into argv by -componentsInShellCommand.
+  hold: >-
+    the evaluation step is a trust boundary this program did not know it had. A
+    tmux session name arrives from another machine and lands in that string, and
+    shell quoting happens a layer too late to help. iTermSwiftyStringParser.m
+    starts an expression at a backslash followed by "(" and at nothing else, so
+    openTab refuses a command containing `\(` rather than trying to escape it —
+    escaping correctly would mean knowing how the expression layer and the shell
+    tokenizer compose, which cannot be tested from here. See ROADMAP.md.
+
+- name: iterm2-focus
+  kind: proto-message
+  repo: gnachman/iTerm2
+  path: proto/api.proto
+  ref: master
+  checked: 2026-09-26
+  note: >-
+    which window a new tab belongs in. CreateTabRequest.window_id is optional and
+    a new window is created without it, which is why every click in v0.1.1 opened
+    a window. FocusRequest is empty and FocusResponse returns
+    FocusChangedNotification values that "completely describe the state of every
+    tab and window and the application itself"; a Window notification carries
+    TERMINAL_WINDOW_BECAME_KEY, TERMINAL_WINDOW_IS_CURRENT or
+    TERMINAL_WINDOW_RESIGNED_KEY. The key window is the one whose toolbelt was
+    clicked, so it is where the tab goes; current is the fallback when a
+    non-terminal window has focus.
 
 - name: iterm2-claude-code-integration
   kind: docs
@@ -109,7 +160,8 @@ unrefreshed pin cannot hide.
   hold: >-
     not verified against a real SSH server by any automated run. The tests drive a
     real subprocess, which is what ssh is to this program, and a stub ssh for the
-    stderr path — but no test has connected to a host. See ROADMAP.md entry 1.
+    stderr path — but no test has connected to a host. See ROADMAP.md, "What two
+    real runs have not reached yet".
 
 - name: iterm2-go
   kind: go-module
@@ -138,26 +190,38 @@ error box, after a `POST /open` was served and answered 404 — so reaching it
 means the toolbelt registration rendered, the web view ran the page's
 JavaScript, its `fetch` to `127.0.0.1` was allowed, the token was accepted, and
 the row carried a `data-key` and was not disabled. Four of the things ROADMAP
-entry 1 listed as unknown are therefore answered, and the fifth — the key round
-trip — was broken and is fixed in Unreleased.
+listed as unknown are therefore answered, and the fifth — the key round trip —
+was broken and is fixed in 0.1.1.
 
 This is inference from one reported message, not a run anyone here observed or
 can repeat. It is recorded because the alternative is to keep calling those
 parts unknown when something is now known about them, not because it is
 equivalent to a test.
 
-**Still not verified: opening a tab, and anything involving SSH.**
+**A second real run, on 2026-09-26, opened a tab.** The v0.1.1 fix let a click
+through, and the user reported the two things that were then wrong: the tab
+opened in a *new window*, and `ssh` ran without the environment their dotfiles
+build, so `SSH_AUTH_SOCK` was unset. Both reports are evidence that the rest
+works: `CreateTab` is accepted, `"Custom Command": "Yes"` with `"Command"` does
+make the new tab run the ssh command rather than a plain shell, and `ssh` itself
+runs. That settles two more of that entry's unknowns, and again by inference
+from what was reported rather than from a run observed here.
 
-- **iTerm2.** No test has talked to iTerm2, and the click that would have created
-  a tab never got past the lookup, so nothing has yet exercised `CreateTab`. The
-  API is off until a human enables it in Settings > General > Magic, and this
-  host also denies Apple Events to its shell, so even the cookie exchange cannot
-  run here. The panel and the tab-opening are tested against a fake that records
-  what was asked for. So the profile keys — `"Custom Command": "Yes"` and
-  `"Command"` — are read from iTerm2's source and have still never been accepted
-  by iTerm2, and no tab has ever been opened.
+**Still not verified.**
+
+- **iTerm2.** No test has talked to iTerm2. The API is off until a human enables
+  it in Settings > General > Magic, and this host also denies Apple Events to its
+  shell, so even the cookie exchange cannot run here. The panel and the
+  tab-opening are tested against a fake that records what was asked for. Three
+  things added on 2026-09-26 have never been accepted by iTerm2: the
+  `"Run Command In Login Shell"` property, `CreateTabRequest.window_id` carrying
+  a window read from a `FocusRequest`, and the refusal of a command containing
+  `\(`. The first two are read from iTerm2's source, the third from its parser.
+- **tmux over ssh.** Whether `tmux select-window ';' attach-session` behaves over
+  `ssh -t` the way it does locally is still unreported either way.
 - **SSH.** No test has connected to a host. `sshd` is reachable on this machine but
   has no key authorised for it, and adding one to the user's `authorized_keys` is
   not this program's business.
 
-Both are `ROADMAP.md` entry 1, and the README says so where a user will see it.
+Both are `ROADMAP.md`, *What two real runs have not reached yet*, and the README
+says so where a user will see it.

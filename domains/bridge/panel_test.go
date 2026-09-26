@@ -2,6 +2,7 @@ package bridge_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 
 	iterm2 "github.com/taumatix/iterm2-go"
 	"github.com/taumatix/iterm2-go/apipb"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/taumatix/iterm2-claude-bridge/domains/bridge"
 	"github.com/taumatix/iterm2-claude-bridge/domains/session"
@@ -40,15 +42,23 @@ type fakeTerminal struct {
 	setVariables [][3]string
 	registered   []*apipb.RegisterToolRequest
 
+	// keyWindow and currentWindow are what a FocusRequest reports. Empty means
+	// no window of that kind, which is what iTerm2 answers when the application
+	// has no terminal window open.
+	keyWindow     string
+	currentWindow string
+
 	createErr error
 	listErr   error
 	setErr    error
+	focusErr  error
 }
 
 func newFakeTerminal() *fakeTerminal {
 	return &fakeTerminal{
 		hierarchy: &iterm2.Hierarchy{},
 		variables: map[string]map[string]string{},
+		keyWindow: "w-front",
 		createdTab: &iterm2.NewTab{
 			WindowID:  "w-new",
 			TabID:     "7",
@@ -100,6 +110,35 @@ func (f *fakeTerminal) SetStringVariable(_ context.Context, _ iterm2.VariableSco
 func (f *fakeTerminal) Do(_ context.Context, req *apipb.ClientOriginatedMessage) (*apipb.ServerOriginatedMessage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if req.GetFocusRequest() != nil {
+		if f.focusErr != nil {
+			return nil, f.focusErr
+		}
+		var notifications []*apipb.FocusChangedNotification
+		add := func(id string, status apipb.FocusChangedNotification_Window_WindowStatus) {
+			notifications = append(notifications, &apipb.FocusChangedNotification{
+				Event: &apipb.FocusChangedNotification_Window_{
+					Window: &apipb.FocusChangedNotification_Window{
+						WindowId:     proto.String(id),
+						WindowStatus: status.Enum(),
+					},
+				},
+			})
+		}
+		// Current first, so a test proving the key window wins is not passing
+		// merely because it was seen first.
+		if f.currentWindow != "" {
+			add(f.currentWindow, apipb.FocusChangedNotification_Window_TERMINAL_WINDOW_IS_CURRENT)
+		}
+		if f.keyWindow != "" {
+			add(f.keyWindow, apipb.FocusChangedNotification_Window_TERMINAL_WINDOW_BECAME_KEY)
+		}
+		return &apipb.ServerOriginatedMessage{
+			Submessage: &apipb.ServerOriginatedMessage_FocusResponse{
+				FocusResponse: &apipb.FocusResponse{Notifications: notifications},
+			},
+		}, nil
+	}
 	if tool := req.GetRegisterToolRequest(); tool != nil {
 		f.registered = append(f.registered, tool)
 		return &apipb.ServerOriginatedMessage{
@@ -124,7 +163,7 @@ func (f *fakeTerminal) lastCreateCommand(t *testing.T) string {
 // startPanel brings up a panel over a registry and closes it on cleanup.
 func startPanel(t *testing.T, registry *session.Registry, term bridge.Terminal) *bridge.Panel {
 	t.Helper()
-	opener := &bridge.Opener{Terminal: term}
+	opener := &bridge.Opener{Terminal: term, Log: quietLog()}
 	p, err := bridge.NewPanel(registry, opener, quietLog())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
@@ -406,6 +445,128 @@ func TestClickingARowWithATabAlreadyOpenDoesNotOpenAnother(t *testing.T) {
 	term.mu.Lock()
 	defer term.mu.Unlock()
 	assert.Empty(t, term.createOpts, "an existing tab should be activated, not duplicated")
+}
+
+func TestANewTabGoesInTheWindowTheUserIsLookingAt(t *testing.T) {
+	// A click arrives from the toolbelt of the window in front, so that is where
+	// the tab belongs. CreateTab with no window id opens a whole new window,
+	// which is what v0.1.1 did on every click.
+	registry := session.NewRegistry()
+	key := remoteSession(t, registry, "box", "s1", session.StatusIdle, "work")
+
+	term := newFakeTerminal()
+	term.keyWindow = "w-front"
+	term.currentWindow = "w-behind"
+	p := startPanel(t, registry, term)
+
+	code, body := postOpen(t, p, key, tokenFrom(t, p))
+	require.Equal(t, http.StatusOK, code, body)
+
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	require.Len(t, term.createOpts, 1)
+	assert.Equal(t, "w-front", term.createOpts[0].WindowID)
+}
+
+func TestANewTabFallsBackToTheCurrentWindowWhenNoneIsKey(t *testing.T) {
+	// Something other than a terminal window has focus — iTerm2 then reports a
+	// window as current but not key, and that is still where the user is working.
+	registry := session.NewRegistry()
+	key := remoteSession(t, registry, "box", "s1", session.StatusIdle, "work")
+
+	term := newFakeTerminal()
+	term.keyWindow = ""
+	term.currentWindow = "w-behind"
+	p := startPanel(t, registry, term)
+
+	code, body := postOpen(t, p, key, tokenFrom(t, p))
+	require.Equal(t, http.StatusOK, code, body)
+
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	require.Len(t, term.createOpts, 1)
+	assert.Equal(t, "w-behind", term.createOpts[0].WindowID)
+}
+
+func TestAClickStillOpensATabWhenIStermCannotSayWhichWindowIsInFront(t *testing.T) {
+	// A tab in the wrong place beats a click that does nothing.
+	registry := session.NewRegistry()
+	key := remoteSession(t, registry, "box", "s1", session.StatusIdle, "work")
+
+	term := newFakeTerminal()
+	term.focusErr = assert.AnError
+	p := startPanel(t, registry, term)
+
+	code, body := postOpen(t, p, key, tokenFrom(t, p))
+	require.Equal(t, http.StatusOK, code, body)
+
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	require.Len(t, term.createOpts, 1)
+	assert.Empty(t, term.createOpts[0].WindowID, "an empty window id is what makes iTerm2 open a new window")
+}
+
+func TestATabRunsSSHThroughTheUsersLoginShell(t *testing.T) {
+	// Without this iTerm2 exec's ssh directly, so no dotfile runs and a
+	// SSH_AUTH_SOCK set in ~/.zshrc — the agent holding the user's keys — is
+	// missing. The key and its default (NO) are iTerm2's own, from
+	// ITAddressBookMgr.h KEY_RUN_COMMAND_IN_LOGIN_SHELL.
+	registry := session.NewRegistry()
+	key := remoteSession(t, registry, "box", "s1", session.StatusIdle, "work")
+
+	term := newFakeTerminal()
+	p := startPanel(t, registry, term)
+
+	code, body := postOpen(t, p, key, tokenFrom(t, p))
+	require.Equal(t, http.StatusOK, code, body)
+
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	require.Len(t, term.createOpts, 1)
+	props := term.createOpts[0].CustomProfileProperties
+	// JSON, matching ProfileProperty.json_value: a bare boolean, not a quoted one.
+	assert.Equal(t, "true", props["Run Command In Login Shell"])
+	assert.Equal(t, `"Yes"`, props["Custom Command"])
+}
+
+func TestAClickIsRefusedWhenTheCommandWouldBecomeAnITerm2Expression(t *testing.T) {
+	// iTerm2 evaluates a profile's Command as an interpolated string before
+	// splitting it into arguments, and its parser starts an expression at `\(`.
+	// A tmux session name is chosen on the remote host, so shell quoting — which
+	// happens a layer later — does not protect this.
+	registry := session.NewRegistry()
+	key := remoteSession(t, registry, "box", "s1", session.StatusIdle, `work\(iterm2.run("say pwned"))`)
+
+	term := newFakeTerminal()
+	p := startPanel(t, registry, term)
+
+	code, body := postOpen(t, p, key, tokenFrom(t, p))
+	assert.Equal(t, http.StatusInternalServerError, code)
+	assert.Contains(t, body, "evaluates as an expression")
+
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	assert.Empty(t, term.createOpts, "no tab should be opened for a command iTerm2 would evaluate")
+}
+
+func TestAnOrdinaryQuoteInATmuxNameIsStillAttachable(t *testing.T) {
+	// The refusal above must be the expression opener specifically. Shell quoting
+	// emits a backslash for an embedded single quote ('\''), and that is harmless
+	// — iTerm2's parser only starts an expression at a backslash followed by "(".
+	registry := session.NewRegistry()
+	key := remoteSession(t, registry, "box", "s1", session.StatusIdle, "it's work")
+
+	term := newFakeTerminal()
+	p := startPanel(t, registry, term)
+
+	code, body := postOpen(t, p, key, tokenFrom(t, p))
+	require.Equal(t, http.StatusOK, code, body)
+
+	// Decoded from the JSON the profile property carries, so the assertion is
+	// about the command iTerm2 runs rather than about JSON's own escaping.
+	var command string
+	require.NoError(t, json.Unmarshal([]byte(term.lastCreateCommand(t)), &command))
+	assert.Contains(t, command, `'it'\''s work'`)
 }
 
 func TestTagsStayDistinctWhenAHostOrTmuxNameContainsASlash(t *testing.T) {
