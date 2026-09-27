@@ -95,6 +95,12 @@ peer runs `ssh \(user.iterm2ClaudeBridgeHost) -t cd \(user.iterm2ClaudeBridgeCwd
 If it cannot, the command is fixed at definition time and a user needs one Workgroup per host,
 which is a much worse thing to ask for and probably means asking iTerm2 upstream instead.
 
+Half of that is now answered by the documentation. Read on 2026-09-27, the Workgroups page says
+"Commands and file commands support iTerm2's interpolated string syntax, `\(name)`", and lists
+`gitBase`, `file`, `codeReviewPrompt` and `codeReviewSystemPrompt` as "the variables most useful
+in Workgroups". So a Peer Command is interpolated. The page still does not say which scope it is
+evaluated in, so whether the parent session's `user.` variables resolve there is unanswered.
+
 Answer that question against a real iTerm2 first. It is one experiment and it decides whether this
 entry is small or is a request to George Nachman.
 
