@@ -154,6 +154,23 @@ while nothing has changed, and a click landing during a reload is lost (worked a
 cancelling the timer). Server-sent events over the same loopback server would remove both, and
 `Registry.Changed()` already exists to drive them.
 
+## 10. Survive iTerm2 restarting
+
+Filed by the 2026-10-01 maintenance pass. It is numbered last only so the references to entries
+1–9 stay valid. By the ordering rule it probably belongs above 5, since iTerm2 restarts on every
+update.
+
+`watch` calls `iterm2.Connect` once (`cmd/iterm2-claude-bridge/watch.go`) and keeps that
+connection for its lifetime. When iTerm2 quits or restarts, the toolbelt registration dies with
+it, and every click fails until the user restarts the bridge. Nothing tells them that is what
+they need to do.
+
+iterm2-go v0.2.0 (2026-09-28) makes this buildable. `Conn.Done()` is closed when the connection
+ends and `Conn.Err()` says why. A second `Connect` in the same process now asks iTerm2 for a fresh
+cookie, where before it presented the spent one and could never succeed. The work is a reconnect
+loop that re-registers the panel and swaps the `Opener`'s terminal, plus a test that drops the
+fake iTerm2 and brings it back.
+
 ## Done
 
 - **v0.1.3** — what reaches tmux is what was meant. There are two shells between the panel and
