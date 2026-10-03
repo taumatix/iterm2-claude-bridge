@@ -32,6 +32,7 @@ type itermServer struct {
 
 	mu         sync.Mutex
 	srv        *http.Server
+	stopped    bool
 	conns      []*websocket.Conn
 	handshakes int
 	registered []string // RegisterToolRequest URLs, in order
@@ -59,21 +60,34 @@ func (s *itermServer) start() {
 	srv := &http.Server{Handler: http.HandlerFunc(s.serve)}
 	s.mu.Lock()
 	s.srv = srv
+	s.stopped = false
 	s.mu.Unlock()
 	go func() { _ = srv.Serve(ln) }()
 }
 
 // stop closes the listener and every connection, as iTerm2 quitting does.
+//
+// The listener goes first and the server is marked stopped before anything is
+// closed. In the other order a client that noticed its connection close could
+// redial into the still-open listener, and http.Server.Close does not close a
+// hijacked WebSocket, so that connection lived on and the "stopped" server kept
+// answering. CI's Linux runner hit exactly that; a real iTerm2 has no such gap.
 func (s *itermServer) stop() {
 	s.mu.Lock()
-	srv, conns := s.srv, s.conns
-	s.srv, s.conns = nil, nil
+	srv := s.srv
+	s.srv = nil
+	s.stopped = true
+	s.mu.Unlock()
+	if srv != nil {
+		_ = srv.Close()
+	}
+
+	s.mu.Lock()
+	conns := s.conns
+	s.conns = nil
 	s.mu.Unlock()
 	for _, c := range conns {
 		_ = c.CloseNow()
-	}
-	if srv != nil {
-		_ = srv.Close()
 	}
 	_ = os.Remove(s.path)
 }
@@ -92,6 +106,12 @@ func (s *itermServer) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	c.SetReadLimit(64 << 20)
 	s.mu.Lock()
+	if s.stopped {
+		// Accepted while stop was running: iTerm2 is gone, so is this.
+		s.mu.Unlock()
+		_ = c.CloseNow()
+		return
+	}
 	s.handshakes++
 	s.conns = append(s.conns, c)
 	s.mu.Unlock()
