@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os/signal"
@@ -59,25 +60,46 @@ first connection raises a permission prompt.`,
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			conn, err := iterm2.Connect(ctx, iterm2.WithAdvisoryName("iterm2-claude-bridge"))
-			if err != nil {
-				return fmt.Errorf("connecting to iTerm2 (is the Python API enabled in Settings > General > Magic?): %w", err)
-			}
-			defer conn.Close()
-
 			ssh := bridge.SSHOptions{Program: sshProgram, Args: sshArgs}
 			registry := session.NewRegistry()
-			opener := &bridge.Opener{Terminal: conn, SSH: ssh, Profile: profile, Log: log}
 
-			panel, err := bridge.NewPanel(registry, opener, log)
+			// The panel needs the Opener, the Opener needs a Terminal, and the
+			// link registers the panel on every connection — so the link is
+			// built first and its OnConnect reads the panel once it exists.
+			var panel *bridge.Panel
+			firstConnection := true
+			link := &bridge.Link{
+				// A fresh iterm2.Connect each time: the cookie a connection was
+				// made with is spent, and iterm2-go v0.2.0 fetches a new one.
+				Dial: func(ctx context.Context) (*iterm2.Conn, error) {
+					return iterm2.Connect(ctx, iterm2.WithAdvisoryName("iterm2-claude-bridge"))
+				},
+				// iTerm2 forgets a toolbelt tool when it quits, so the panel is
+				// registered on every connection. Only the first reveals it; a
+				// restart should not pop the toolbelt open.
+				OnConnect: func(ctx context.Context, term bridge.Terminal) error {
+					reveal := firstConnection
+					firstConnection = false
+					return bridge.RegisterPanel(ctx, term, panel.URL(), reveal)
+				},
+				Log: log,
+			}
+			opener := &bridge.Opener{Terminal: link, SSH: ssh, Profile: profile, Log: log}
+
+			var err error
+			panel, err = bridge.NewPanel(registry, opener, log)
 			if err != nil {
 				return err
 			}
 			defer panel.Close()
 
-			if err := bridge.RegisterPanel(ctx, conn, panel.URL(), true); err != nil {
-				return err
+			if err := link.Connect(ctx); err != nil {
+				return fmt.Errorf("connecting to iTerm2 (is the Python API enabled in Settings > General > Magic?): %w", err)
 			}
+			defer link.Close()
+			// Reconnects, and registers the panel again, each time iTerm2
+			// restarts — which it does on every update.
+			go link.Run(ctx)
 			log.Info("panel registered with iTerm2",
 				"tool", bridge.ToolName,
 				"hosts", hosts,

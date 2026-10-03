@@ -3,6 +3,7 @@ module github.com/taumatix/iterm2-claude-bridge
 go 1.27.1
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/taumatix/iterm2-go v0.2.0
@@ -12,7 +13,6 @@ require (
 )
 
 require (
-	github.com/coder/websocket v1.8.15 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 )
