@@ -24,6 +24,7 @@ func newWatchCommand() *cobra.Command {
 		remoteCommand string
 		profile       string
 		forgetAfter   time.Duration
+		staleAfter    time.Duration
 		verbose       bool
 	)
 
@@ -92,6 +93,7 @@ first connection raises a permission prompt.`,
 				return err
 			}
 			defer panel.Close()
+			panel.SetStaleAfter(staleAfter)
 
 			if err := link.Connect(ctx); err != nil {
 				return fmt.Errorf("connecting to iTerm2 (is the Python API enabled in Settings > General > Magic?): %w", err)
@@ -131,6 +133,8 @@ first connection raises a permission prompt.`,
 		"iTerm2 profile for new tabs (default: iTerm2's default profile)")
 	cmd.Flags().DurationVar(&forgetAfter, "forget-ended-after", 30*time.Second,
 		"how long an ended session stays in the panel")
+	cmd.Flags().DurationVar(&staleAfter, "stale-after", bridge.DefaultStaleAfter,
+		"how long a working session may go without an update before its row is marked stale (0 turns it off)")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "log more")
 
 	// Required in practice, and saying so in the flag means cobra prints the usage
