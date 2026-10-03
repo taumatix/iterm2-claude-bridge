@@ -41,7 +41,7 @@ No inbound ports, no daemon to expose: the only channel is an SSH connection you
 Go 1.27 or newer, on both sides.
 
 ```sh
-go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.1.3
+go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.2.0
 ```
 
 ### On each remote host
@@ -88,6 +88,11 @@ iterm2-claude-bridge watch --host build-box --ssh-arg -J --ssh-arg bastion
 ```
 
 ## The panel
+
+When iTerm2 quits or restarts (it does on every update), `watch` keeps running. It reconnects when
+iTerm2 is back and registers the panel again; a click made in between is refused with a message
+saying iTerm2 is not connected, rather than failing on a dead socket. A reconnect asks iTerm2 for a
+fresh cookie over AppleScript, so macOS may ask once whether this program may control iTerm2.
 
 One row per Claude session, ordered so the ones wanting you come first:
 
