@@ -171,6 +171,14 @@ cause (the Automation permission in System Settings, or the API setting) rather 
 every 30s. Whether to go further, a macOS notification, needs a real run to see what the failure
 actually looks like from a process iTerm2 did not launch.
 
+## 11. `Link` duplicates what iterm2-go's `Persistent` now does
+
+`bridge.Link` reconnects, re-registers the panel and answers `ErrITermUnavailable` while iTerm2 is
+away, because iterm2-go v0.3.0's `Persistent` had no typed methods. v0.4.0 has them, and the
+`Client` interface `*Conn` and `*Persistent` share. Building `Link` on `Persistent` would leave the
+panel registration (redone on `Reconnects()`) as its only own logic. Keep `Link`'s exported API
+and `ErrITermUnavailable` (wrapping `iterm2.ErrReconnecting`) so nothing breaks.
+
 ## Done
 
 - **v0.3.0**: a working session that has stopped reporting is marked stale, after ten minutes by
