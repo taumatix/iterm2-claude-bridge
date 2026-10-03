@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-04
+
+### Added
+
+- **A working session that stops reporting is marked stale.** Status is only as good as the last
+  hook that fired, so a session whose Claude was killed, or whose machine slept, said "working"
+  for ever. A working session reports on every tool call; once one has said nothing for ten
+  minutes its row reads `working? · no update for …`, with a hollow dot. Waiting and idle
+  sessions are never marked, since resting is what they do. `watch --stale-after` changes the
+  threshold, and `0` turns it off.
+- `bridge.DefaultStaleAfter` and `(*bridge.Panel).SetStaleAfter`.
+
 ## [0.2.0] - 2026-10-04
 
 ### Fixed

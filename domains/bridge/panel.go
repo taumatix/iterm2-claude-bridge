@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/taumatix/iterm2-claude-bridge/domains/session"
@@ -38,6 +39,11 @@ type Panel struct {
 	// 127.0.0.1. The token is given to iTerm2 in the tool's URL and required on
 	// every request.
 	token string
+
+	// staleAfter is how long a working session may go without an event before
+	// its row says so; 0 turns the marking off. Atomic because the panel is
+	// already serving when SetStaleAfter is called.
+	staleAfter atomic.Int64
 
 	listener net.Listener
 	server   *http.Server
@@ -67,6 +73,7 @@ func NewPanel(registry *session.Registry, opener *Opener, log *slog.Logger) (*Pa
 		token:    token,
 		listener: listener,
 	}
+	p.staleAfter.Store(int64(DefaultStaleAfter))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", p.handleIndex)
@@ -86,6 +93,20 @@ func NewPanel(registry *session.Registry, opener *Opener, log *slog.Logger) (*Pa
 		}
 	}()
 	return p, nil
+}
+
+// DefaultStaleAfter is how long a working session may go without an event
+// before the panel marks it stale. A working session reports on every tool
+// call, and ten minutes is longer than any single tool call or model turn
+// usually takes; one that has said nothing for that long has most likely lost
+// its hook, through a crashed CLI or a killed shell.
+const DefaultStaleAfter = 10 * time.Minute
+
+// SetStaleAfter changes how long a working session may go without an event
+// before its row is marked stale. 0 turns the marking off. Only working
+// sessions are ever marked: waiting and idle are states a session rests in.
+func (p *Panel) SetStaleAfter(d time.Duration) {
+	p.staleAfter.Store(int64(d))
 }
 
 // URL is the address to register with iTerm2, carrying the token.
@@ -110,6 +131,9 @@ type row struct {
 	Tmux       string
 	Attachable bool
 	Age        string
+	// Stale is set when a working session has gone quiet for longer than the
+	// threshold, so its status is a last known one rather than a current one.
+	Stale bool
 }
 
 // handleIndex renders the current state.
@@ -121,7 +145,9 @@ func (p *Panel) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	sessions := p.Registry.Sessions()
 	rows := make([]row, 0, len(sessions))
+	staleAfter := time.Duration(p.staleAfter.Load())
 	for _, s := range sessions {
+		quiet := time.Since(s.Since)
 		rows = append(rows, row{
 			Key:        s.Key(),
 			Host:       s.Host,
@@ -130,7 +156,8 @@ func (p *Panel) handleIndex(w http.ResponseWriter, r *http.Request) {
 			StatusText: statusText(s.Status),
 			Tmux:       s.Tmux.Session,
 			Attachable: s.Attachable(),
-			Age:        humaniseAge(time.Since(s.Since)),
+			Age:        humaniseAge(quiet),
+			Stale:      staleAfter > 0 && s.Status == session.StatusWorking && quiet > staleAfter,
 		})
 	}
 

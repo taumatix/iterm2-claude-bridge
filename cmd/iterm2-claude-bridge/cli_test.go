@@ -93,6 +93,13 @@ func TestWatchRefusesWithNoHosts(t *testing.T) {
 	assert.Contains(t, err.Error(), "host")
 }
 
+func TestWatchOffersTheStaleThreshold(t *testing.T) {
+	out, err := runCommand(t, "watch", "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "--stale-after")
+	assert.Contains(t, out, "10m0s")
+}
+
 // TestHookAndStreamEndToEnd drives the real binary the way the two halves are
 // actually used: hooks append, and a stream over a pipe replays and follows.
 //

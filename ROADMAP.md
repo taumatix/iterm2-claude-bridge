@@ -120,14 +120,16 @@ every iTerm2 release.
 
 ## 6. A session's status goes stale when the hook cannot run
 
-Status is only as good as the last hook that fired. If Claude is killed, the machine sleeps, or
-the hook fails, the row keeps saying "working" forever, and nothing distinguishes that from a long
-tool call.
+Status is only as good as the last hook that fired. v0.3.0 marks a *working* row stale after ten
+quiet minutes, since a working session reports on every tool call. That leaves two gaps:
 
-Two halves, and the first is cheap: show the age of the last change in the row (already rendered)
-and grey out anything older than some threshold. The second is to have the reporter notice that
-the process behind a session is gone — which needs the hook to record a pid, and the stream to
-check it.
+- A *waiting* or *idle* session whose Claude was killed looks exactly like one resting, because
+  resting is silent too. Telling them apart needs the reporter to notice the process is gone: the
+  hook records Claude's pid, and the stream checks it and reports the session `gone`. A pid alone
+  can be reused, so it needs the process start time with it.
+- A model turn that calls no tool for over ten minutes (a long think, a slow API) is marked stale
+  while alive. `--stale-after` is the workaround. A `UserPromptSubmit` or periodic heartbeat from
+  the hook would make the threshold safe to shorten; the pid check above would make it unneeded.
 
 ## 7. Nothing verifies that the remote and local builds agree
 
@@ -170,6 +172,10 @@ every 30s. Whether to go further, a macOS notification, needs a real run to see 
 actually looks like from a process iTerm2 did not launch.
 
 ## Done
+
+- **v0.3.0**: a working session that has stopped reporting is marked stale, after ten minutes by
+  default (`watch --stale-after`). It is tested by rendering the real panel over HTTP; how it looks
+  in iTerm2's toolbelt has not been seen, which belongs to entry 1.
 
 - **v0.2.0**: `watch` survives iTerm2 restarting. `bridge.Link` holds the current connection,
   reconnects with a doubling wait (1s to 30s), registers the panel again on each new connection,

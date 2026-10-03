@@ -681,3 +681,76 @@ func tokenFrom(t *testing.T, p *bridge.Panel) string {
 	require.NotEmpty(t, token)
 	return token
 }
+
+// sessionLastHeardFrom records a session whose last event was ago in the past.
+func sessionLastHeardFrom(t *testing.T, r *session.Registry, host string, status session.Status, ago time.Duration) {
+	t.Helper()
+	require.True(t, r.Apply(session.Event{
+		Host:      host,
+		SessionID: host + "-s",
+		Status:    status,
+		At:        time.Now().UTC().Add(-ago),
+		Cwd:       "/srv/app",
+	}))
+}
+
+// A working session reports on every tool call, so one that has said nothing
+// for longer than the threshold has most likely lost its hook — a crashed CLI,
+// a killed shell — and its "working" is no longer news.
+func TestPanelMarksAWorkingSessionThatHasGoneQuietAsStale(t *testing.T) {
+	registry := session.NewRegistry()
+	sessionLastHeardFrom(t, registry, "quiet-box", session.StatusWorking, 20*time.Minute)
+	sessionLastHeardFrom(t, registry, "busy-box", session.StatusWorking, time.Second)
+	p := startPanel(t, registry, newFakeTerminal())
+
+	_, body := get(t, p.URL())
+
+	quiet, busy := rowFor(t, body, "quiet-box"), rowFor(t, body, "busy-box")
+	assert.Contains(t, quiet, `class="stale"`)
+	assert.Contains(t, quiet, "no update for 20m")
+	assert.NotContains(t, busy, "stale")
+	assert.NotContains(t, busy, "no update")
+}
+
+// Waiting and idle are states a session rests in: hours without an event is
+// what they look like when everything is fine.
+func TestPanelDoesNotMarkARestingSessionStale(t *testing.T) {
+	registry := session.NewRegistry()
+	sessionLastHeardFrom(t, registry, "waiting-box", session.StatusWaiting, 3*time.Hour)
+	sessionLastHeardFrom(t, registry, "idle-box", session.StatusIdle, 3*time.Hour)
+	p := startPanel(t, registry, newFakeTerminal())
+
+	_, body := get(t, p.URL())
+
+	for _, host := range []string{"waiting-box", "idle-box"} {
+		assert.NotContains(t, rowFor(t, body, host), "stale", host)
+	}
+}
+
+func TestPanelStaleThresholdIsConfigurableAndCanBeTurnedOff(t *testing.T) {
+	registry := session.NewRegistry()
+	sessionLastHeardFrom(t, registry, "quiet-box", session.StatusWorking, 2*time.Minute)
+	p := startPanel(t, registry, newFakeTerminal())
+
+	_, body := get(t, p.URL())
+	assert.NotContains(t, rowFor(t, body, "quiet-box"), "stale", "under the default threshold")
+
+	p.SetStaleAfter(time.Minute)
+	_, body = get(t, p.URL())
+	assert.Contains(t, rowFor(t, body, "quiet-box"), `class="stale"`)
+
+	p.SetStaleAfter(0)
+	_, body = get(t, p.URL())
+	assert.NotContains(t, rowFor(t, body, "quiet-box"), "stale", "0 turns it off")
+}
+
+// rowFor returns the <li> element that shows host.
+func rowFor(t *testing.T, body, host string) string {
+	t.Helper()
+	i := strings.Index(body, ">"+host+"<")
+	require.NotEqual(t, -1, i, "no row for %s", host)
+	start := strings.LastIndex(body[:i], "<li")
+	end := strings.Index(body[i:], "</li>")
+	require.True(t, start >= 0 && end >= 0)
+	return body[start : i+end]
+}

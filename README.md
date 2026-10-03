@@ -41,7 +41,7 @@ No inbound ports, no daemon to expose: the only channel is an SSH connection you
 Go 1.27 or newer, on both sides.
 
 ```sh
-go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.2.0
+go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.3.0
 ```
 
 ### On each remote host
@@ -102,6 +102,14 @@ One row per Claude session, ordered so the ones wanting you come first:
 | **working** | running a prompt or a tool |
 | **idle** | finished responding |
 | **ended** | the session has gone; the row disappears shortly after |
+
+A row also shows how long ago its status last changed. A **working** session reports on every
+tool call, so one that has said nothing for ten minutes has most likely lost its hook (Claude was
+killed, or the machine slept). Its row then reads `working? · no update for 12m`, with a hollow dot,
+so a stale status does not pass for a current one. Change the threshold with
+`watch --stale-after 30m`, or turn it off with `--stale-after 0`. A *waiting* or *idle* session
+that died the same way still looks alive; noticing that needs the process itself checked
+([ROADMAP.md](ROADMAP.md), *A session's status goes stale*).
 
 Each row shows the host and working directory. Clicking one brings up its tab, opening
 `ssh <host> -t tmux select-window -t <window> ';' attach-session -t <session>` if there is none.
