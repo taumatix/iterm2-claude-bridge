@@ -18,6 +18,9 @@ rather than a plain shell, and `ssh` itself runs from a tab iTerm2 spawned.
 
 What no run has reported either way:
 
+- Whether v0.2.0's reconnect works against a real iTerm2 restart: how soon `Conn.Done()` fires
+  when iTerm2 quits, whether the AppleScript cookie request succeeds from the process `watch` runs
+  in, and whether the re-registered panel reappears in the toolbelt without being revealed.
 - Whether `tmux select-window -t @N ';' attach-session -t name` behaves over `ssh -t` the way it
   does locally. A third run reached it and it failed, but for a reason on this side of the wire:
   the `;` lost its quoting to a shell layer the tests did not know about, fixed in v0.1.3. Whether
@@ -154,24 +157,24 @@ while nothing has changed, and a click landing during a reload is lost (worked a
 cancelling the timer). Server-sent events over the same loopback server would remove both, and
 `Registry.Changed()` already exists to drive them.
 
-## 10. Survive iTerm2 restarting
+## 10. A reconnect that keeps failing says so only in the log
 
-Filed by the 2026-10-01 maintenance pass. It is numbered last only so the references to entries
-1–9 stay valid. By the ordering rule it probably belongs above 5, since iTerm2 restarts on every
-update.
+Since v0.2.0 `watch` reconnects when iTerm2 comes back. If it never can — the API was switched off,
+or macOS denies the AppleScript cookie request a reconnect needs — it retries every 30s for ever,
+and the failures are logged at debug level. The panel is gone from the toolbelt, so the user sees
+nothing at all, which is the original problem again in a narrower case.
 
-`watch` calls `iterm2.Connect` once (`cmd/iterm2-claude-bridge/watch.go`) and keeps that
-connection for its lifetime. When iTerm2 quits or restarts, the toolbelt registration dies with
-it, and every click fails until the user restarts the bridge. Nothing tells them that is what
-they need to do.
-
-iterm2-go v0.2.0 (2026-09-28) makes this buildable. `Conn.Done()` is closed when the connection
-ends and `Conn.Err()` says why. A second `Connect` in the same process now asks iTerm2 for a fresh
-cookie, where before it presented the spent one and could never succeed. The work is a reconnect
-loop that re-registers the panel and swaps the `Opener`'s terminal, plus a test that drops the
-fake iTerm2 and brings it back.
+The first failed attempt is the moment to say something at warning level, once, naming the likely
+cause (the Automation permission in System Settings, or the API setting) rather than repeating it
+every 30s. Whether to go further, a macOS notification, needs a real run to see what the failure
+actually looks like from a process iTerm2 did not launch.
 
 ## Done
+
+- **v0.2.0**: `watch` survives iTerm2 restarting. `bridge.Link` holds the current connection,
+  reconnects with a doubling wait (1s to 30s), registers the panel again on each new connection,
+  and answers `ErrITermUnavailable` in between. It is tested over a real unix socket against a
+  stand-in iTerm2 that is dropped and brought back. The real-iTerm2 check is part of entry 1.
 
 - **v0.1.3** — what reaches tmux is what was meant. There are two shells between the panel and
   tmux, and the quoting test only knew about the second: iTerm2 parses a profile's Command before

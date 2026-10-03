@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-04
+
+### Fixed
+
+- **`watch` survives iTerm2 restarting.** It kept its first connection for life, so when iTerm2
+  quit or updated, the toolbelt panel died with it and every click failed until you restarted the
+  bridge, with nothing saying that was what you needed to do. It now notices the connection end,
+  reconnects when iTerm2 is back (waiting 1s, doubling to 30s between attempts), and registers
+  the panel again. A click made while iTerm2 is away says so. Built on iterm2-go v0.2.0, whose
+  second `Connect` in a process asks iTerm2 for a fresh cookie instead of presenting the spent one.
+
+### Added
+
+- `bridge.Link`, a `Terminal` that holds the current iTerm2 connection and replaces it when it
+  ends, and `bridge.ErrITermUnavailable`, what its calls return in between.
+
+### Known limitation
+
+Tested against a stand-in iTerm2 over a real unix socket that is dropped and restarted, not yet
+against a real iTerm2 restarting. That run is part of ROADMAP entry 1.
+
 ## [0.1.3] - 2026-09-26
 
 ### Security
@@ -180,7 +201,8 @@ schedule, and which test failed was a property of the scheduler rather than of t
   machine sleeps, the row keeps saying "working" (`ROADMAP.md`, *A session's status goes stale
   when the hook cannot run*).
 
-[Unreleased]: https://github.com/taumatix/iterm2-claude-bridge/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/taumatix/iterm2-claude-bridge/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/taumatix/iterm2-claude-bridge/releases/tag/v0.2.0
 [0.1.3]: https://github.com/taumatix/iterm2-claude-bridge/releases/tag/v0.1.3
 [0.1.2]: https://github.com/taumatix/iterm2-claude-bridge/releases/tag/v0.1.2
 [0.1.1]: https://github.com/taumatix/iterm2-claude-bridge/releases/tag/v0.1.1
