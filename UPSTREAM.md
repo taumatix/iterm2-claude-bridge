@@ -176,8 +176,8 @@ unrefreshed pin cannot hide.
 - name: iterm2-go
   kind: go-module
   module: github.com/taumatix/iterm2-go
-  version: v0.2.0
-  checked: 2026-10-01
+  version: v0.6.0
+  checked: 2026-10-05
   note: >-
     the iTerm2 client. Written by the same author as this program, and its own
     UPSTREAM.md records that its connection layer is not verified against a running
