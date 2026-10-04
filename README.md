@@ -41,7 +41,7 @@ No inbound ports, no daemon to expose: the only channel is an SSH connection you
 Go 1.27 or newer, on both sides.
 
 ```sh
-go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.5.1
+go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.5.2
 ```
 
 ### On each remote host

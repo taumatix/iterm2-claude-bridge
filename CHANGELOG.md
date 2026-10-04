@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-05
+
+### Fixed
+
+- **A session resumed with `claude --resume` could be shown as ended.** The resumed Claude keeps
+  the session id under a new process. If the remote stream found the old process dead just as
+  the new one's first hook was written, it reported the session ended, and the row disappeared
+  until the next hook. The stream now checks the log for anything newer before reporting an
+  exit.
+
 ## [0.5.1] - 2026-10-05
 
 ### Fixed
