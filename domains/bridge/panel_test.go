@@ -789,3 +789,48 @@ func TestPanelForgetsAnOutdatedHostWhenItsStreamEnds(t *testing.T) {
 	_, body := get(t, p.URL())
 	assert.NotContains(t, body, "old-box")
 }
+
+// A working session whose host checks its Claude process is reported gone if
+// that process exits, so a long quiet turn there is a turn, not a lost hook:
+// marking it stale would be the one false alarm v0.3.0 left. A session the
+// host cannot check keeps the marking.
+func TestPanelDoesNotMarkStaleASessionItsHostIsCheckingTheProcessOf(t *testing.T) {
+	registry := session.NewRegistry()
+	quietWorking := func(host, id string, p *session.Process) {
+		require.True(t, registry.Apply(session.Event{
+			Host: host, SessionID: id, Status: session.StatusWorking,
+			At: time.Now().UTC().Add(-20 * time.Minute), Cwd: "/srv/app", Process: p,
+		}))
+	}
+	proc := &session.Process{PID: 4242, Started: "Mon Oct 5 00:00:00 2026"}
+	registry.SetRemote("checked-box", session.Hello{Protocol: session.Protocol, CheckProcesses: true})
+	registry.SetRemote("unchecked-box", session.Hello{Protocol: session.Protocol, CheckProcesses: false})
+	quietWorking("checked-box", "with-process", proc)
+	quietWorking("unchecked-box", "with-process", proc)
+	registry.SetRemote("noproc-box", session.Hello{Protocol: session.Protocol, CheckProcesses: true})
+	quietWorking("noproc-box", "without-process", nil)
+
+	p := startPanel(t, registry, newFakeTerminal())
+	_, body := get(t, p.URL())
+
+	assert.NotContains(t, rowFor(t, body, "checked-box"), "stale", "a checked session was marked stale")
+	assert.Contains(t, rowFor(t, body, "unchecked-box"), `class="stale"`, "the host does not check, so the marking stays")
+	assert.Contains(t, rowFor(t, body, "noproc-box"), `class="stale"`, "no process recorded, so nothing is checked")
+}
+
+// A later event without a process (a hook that could not tell) keeps the one an
+// earlier event recorded.
+func TestALaterEventWithoutAProcessKeepsTheRecordedOne(t *testing.T) {
+	registry := session.NewRegistry()
+	proc := &session.Process{PID: 7, Started: "x"}
+	base := session.Event{Host: "h", SessionID: "s", Status: session.StatusWorking, At: time.Now().UTC().Add(-time.Minute), Process: proc}
+	require.True(t, registry.Apply(base))
+	later := base
+	later.At, later.Process, later.Status = time.Now().UTC(), nil, session.StatusWaiting
+	registry.Apply(later)
+
+	got, ok := registry.Lookup(base.Key())
+	require.True(t, ok)
+	require.NotNil(t, got.Process)
+	assert.Equal(t, 7, got.Process.PID)
+}

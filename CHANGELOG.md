@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-05
+
+### Fixed
+
+- **A long turn without a tool call is no longer marked stale where it cannot be dead.** The
+  ten-minute marking exists for a Claude that died without telling anyone. A host that checks its
+  sessions' Claude processes already reports such a session ended. So a quiet *working* row there
+  is a live turn (a long think, a slow API), and marking it stale was a false alarm. Rows from a
+  host that does not check, or a session with no recorded process, are marked as before.
+
 ## [0.5.0] - 2026-10-04
 
 ### Added
