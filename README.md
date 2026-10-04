@@ -41,7 +41,7 @@ No inbound ports, no daemon to expose: the only channel is an SSH connection you
 Go 1.27 or newer, on both sides.
 
 ```sh
-go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.4.0
+go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.5.0
 ```
 
 ### On each remote host
@@ -110,7 +110,9 @@ so a stale status does not pass for a current one. Change the threshold with
 `watch --stale-after 30m`, or turn it off with `--stale-after 0`. A session whose Claude
 exits without saying so (killed, crashed) is noticed on its host instead: the hook records which
 Claude process it ran for, and `stream` checks every ten seconds (`stream --check-processes`) and
-reports the session ended once that process is gone. That needs both halves at v0.4.0 or later.
+reports the session ended once that process is gone. That needs both halves at v0.4.0 or later,
+and from v0.5.0 the panel names any host whose remote half is older than the Mac's, so a stale
+remote does not quietly show less.
 
 Each row shows the host and working directory. Clicking one brings up its tab, opening
 `ssh <host> -t tmux select-window -t <window> ';' attach-session -t <session>` if there is none.

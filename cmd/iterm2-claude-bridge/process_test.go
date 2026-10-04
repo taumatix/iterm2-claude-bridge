@@ -89,3 +89,33 @@ func TestTheStreamReportsASessionGoneWhenItsProcessExits(t *testing.T) {
 	assert.Equal(t, session.StatusGone, gone.Status)
 	assert.Equal(t, "/srv/app", gone.Cwd, "the gone event should still say where the session was")
 }
+
+// The stream opens by saying what it is, so a watcher can tell a remote that
+// cannot report exited processes from one that has none to report.
+func TestTheStreamOpensWithItsHello(t *testing.T) {
+	binary := buildBinary(t)
+	for _, tc := range []struct {
+		args   []string
+		checks bool
+	}{
+		{nil, true},
+		{[]string{"--check-processes", "0"}, false},
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		args := append([]string{"stream", "--state-dir", t.TempDir()}, tc.args...)
+		cmd := exec.CommandContext(ctx, binary, args...)
+		stdout, err := cmd.StdoutPipe()
+		require.NoError(t, err)
+		require.NoError(t, cmd.Start())
+		line, err := bufio.NewReader(stdout).ReadBytes('\n')
+		cancel()
+		_ = cmd.Wait()
+		require.NoError(t, err)
+
+		hello, ok := session.DecodeHello(line)
+		require.True(t, ok, "the first line was not a hello: %s", line)
+		assert.Equal(t, session.Protocol, hello.Protocol)
+		assert.NotEmpty(t, hello.Version)
+		assert.Equal(t, tc.checks, hello.CheckProcesses, "args %v", tc.args)
+	}
+}

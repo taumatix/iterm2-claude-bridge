@@ -44,6 +44,10 @@ type Stream struct {
 	// that sees no traffic. Zero disables it.
 	Heartbeat time.Duration
 
+	// Hello, when set, is written before anything else, so the watcher knows
+	// what it is talking to.
+	Hello *session.Hello
+
 	// CheckProcesses is how often to look for sessions whose Claude process has
 	// exited without a SessionEnd hook. Zero, or a nil Alive, disables it.
 	CheckProcesses time.Duration
@@ -89,6 +93,15 @@ func (s *Stream) Run(ctx context.Context, w io.Writer) error {
 
 	s.latest = make(map[string]session.Event, len(replay))
 	out := bufio.NewWriter(w)
+	if s.Hello != nil {
+		line, err := s.Hello.Encode()
+		if err != nil {
+			return err
+		}
+		if _, err := out.Write(line); err != nil {
+			return fmt.Errorf("reporter: writing the hello: %w", err)
+		}
+	}
 	for _, e := range replay {
 		s.latest[e.SessionID] = e
 		if err := writeEvent(out, e); err != nil {

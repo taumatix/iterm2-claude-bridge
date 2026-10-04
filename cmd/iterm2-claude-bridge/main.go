@@ -9,12 +9,24 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=v0.1.0".
+// Left at "dev", it is filled in from the module version `go install …@vX`
+// records in the binary, which is how the README says to install.
 var version = "dev"
+
+func init() {
+	if version != "dev" {
+		return
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+}
 
 func main() {
 	if err := newRootCommand().Execute(); err != nil {

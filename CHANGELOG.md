@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-04
+
+### Added
+
+- **The panel names a host running an older build.** The remote half is upgraded by whoever runs
+  that host, and an old one gave quietly reduced function with nothing saying which half was
+  stale. `stream` now opens with a hello line giving its protocol level, version, and whether it
+  checks processes. A host whose stream has none, or an older level, gets a notice in the panel
+  until it is upgraded. An older watcher reading a new stream logs the hello once per connection
+  as an unreadable line and carries on.
+- `session.Hello`, `session.Protocol`, `session.DecodeHello`, `Registry.SetRemote`,
+  `Registry.Remotes` and `reporter.Stream.Hello`.
+
+### Fixed
+
+- **`--version` printed `dev` for a binary installed with `go install …@vX`.** It now reads the
+  module version Go records in the binary when no version was set at link time.
+
 ## [0.4.0] - 2026-10-04
 
 ### Added
