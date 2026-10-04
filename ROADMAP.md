@@ -118,15 +118,6 @@ third party — a variable, an RPC, anything published. If it can, this becomes 
 program. Until then the second panel is right, because guessing at an internal would break on
 every iTerm2 release.
 
-## 6. A resumed session can be shown gone for one hook interval
-
-A session resumed with `claude --resume` keeps its session id under a new process. If the stream
-sees the old process dead just as the new one's first hook lands, the `gone` it appends can be
-newer than the resumed `working`, and the row disappears until the next hook. The fix is for
-`reportExited` to re-read the log's newest event for that session just before appending, and skip
-if it names another process. Since v0.5.1 the stale marking no longer applies where processes are
-checked, so this race is the remaining false signal on those hosts.
-
 ## 8. Discover hosts rather than listing them
 
 `--host` per host, every time. Reading them from a config file, or from `~/.ssh/config` with a
@@ -166,6 +157,8 @@ The bridge depends on iterm2-go v0.6.0 since 2026-10-05, and v0.6.0 removes that
 need not re-register the panel on `Reconnects()` at all.
 
 ## Done
+
+- **v0.5.2**: a `claude --resume` racing the process check no longer shows the session as ended.
 
 - **v0.5.1**: a quiet working row on a host that checks processes is not marked stale.
 

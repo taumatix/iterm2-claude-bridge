@@ -221,6 +221,23 @@ func (s *Stream) follow(ctx context.Context, w io.Writer, offset int64) (wrote b
 	return wrote, consumed, nil
 }
 
+// newerInLog reports whether the log holds an event for e's session newer than
+// e. It reads the whole (compacted) log, which is affordable because it runs
+// only when a process has been found dead. A log it cannot read is not taken as
+// evidence either way, so the exit is still reported.
+func (s *Stream) newerInLog(e session.Event) bool {
+	events, err := s.Store.Replay()
+	if err != nil {
+		return false
+	}
+	for _, other := range events {
+		if other.SessionID == e.SessionID && other.At.After(e.At) {
+			return true
+		}
+	}
+	return false
+}
+
 // reportExited records a session as gone when the Claude process its newest
 // event names has exited, as a SessionEnd hook would have if Claude had lived
 // to run it.
@@ -239,6 +256,14 @@ func (s *Stream) reportExited(ctx context.Context) error {
 		}
 		alive, err := s.Alive(ctx, *e.Process)
 		if err != nil || alive {
+			continue
+		}
+		if s.newerInLog(e) {
+			// Something arrived for this session that the follow loop has not
+			// read yet, typically the first hook of a process resumed with
+			// `claude --resume` under the same session id. Ending the session
+			// now would end one that is running again; the next check judges
+			// it by that newer event instead.
 			continue
 		}
 		gone := session.Event{
