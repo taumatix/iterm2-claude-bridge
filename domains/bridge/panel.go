@@ -155,6 +155,7 @@ func (p *Panel) handleIndex(w http.ResponseWriter, r *http.Request) {
 	sessions := p.Registry.Sessions()
 	rows := make([]row, 0, len(sessions))
 	staleAfter := time.Duration(p.staleAfter.Load())
+	remotes := p.Registry.Remotes()
 	for _, s := range sessions {
 		quiet := time.Since(s.Since)
 		rows = append(rows, row{
@@ -166,7 +167,10 @@ func (p *Panel) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Tmux:       s.Tmux.Session,
 			Attachable: s.Attachable(),
 			Age:        humaniseAge(quiet),
-			Stale:      staleAfter > 0 && s.Status == session.StatusWorking && quiet > staleAfter,
+			// A session whose host checks its process is reported gone if the
+			// process exits, so quiet there means a long turn, not a lost hook.
+			Stale: staleAfter > 0 && s.Status == session.StatusWorking && quiet > staleAfter &&
+				!(remotes[s.Host].CheckProcesses && s.Process != nil),
 		})
 	}
 

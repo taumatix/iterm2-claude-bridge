@@ -17,6 +17,9 @@ type Session struct {
 	Tmux      TmuxTarget
 	Cwd       string
 	HookEvent string
+	// Process is the Claude process the remote's hook recorded, nil when none
+	// was. With a remote that checks processes, an exit is reported as gone.
+	Process *Process
 }
 
 // Key identifies the session, matching [Event.Key].
@@ -85,6 +88,7 @@ func (r *Registry) Apply(e Event) (changed bool) {
 		Tmux:      e.Tmux,
 		Cwd:       e.Cwd,
 		HookEvent: e.HookEvent,
+		Process:   e.Process,
 	}
 	// A later event may carry no tmux target or cwd — not every hook payload has
 	// one to hand — and dropping what an earlier event established would make the
@@ -102,6 +106,11 @@ func (r *Registry) Apply(e Event) (changed bool) {
 	}
 	if next.Cwd == "" {
 		next.Cwd = existing.Cwd
+	}
+	// A hook that could not tell its process is not evidence the process
+	// changed.
+	if next.Process == nil {
+		next.Process = existing.Process
 	}
 
 	if known && sameToAWatcher(existing, next) {
