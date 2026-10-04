@@ -38,6 +38,10 @@ type Registry struct {
 	mu       sync.RWMutex
 	sessions map[string]Session
 
+	// remotes is what each host's stream said about itself, for as long as the
+	// stream lasts.
+	remotes map[string]Hello
+
 	// changed is closed and replaced whenever the contents change, so a reader can
 	// wait for the next change without polling. Broadcasting by closing a channel
 	// rather than with sync.Cond lets a waiter also select on a context.
@@ -48,6 +52,7 @@ type Registry struct {
 func NewRegistry() *Registry {
 	return &Registry{
 		sessions: make(map[string]Session),
+		remotes:  make(map[string]Hello),
 		changed:  make(chan struct{}),
 	}
 }
@@ -138,7 +143,8 @@ func (r *Registry) ForgetHost(host string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var removed bool
+	_, removed := r.remotes[host]
+	delete(r.remotes, host)
 	for key, s := range r.sessions {
 		if s.Host == host {
 			delete(r.sessions, key)
@@ -148,6 +154,29 @@ func (r *Registry) ForgetHost(host string) {
 	if removed {
 		r.broadcastLocked()
 	}
+}
+
+// SetRemote records what host's stream said about itself. A stream from before
+// [Protocol] 2 says nothing; the watcher records it as protocol 1.
+func (r *Registry) SetRemote(host string, h Hello) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if old, ok := r.remotes[host]; ok && old == h {
+		return
+	}
+	r.remotes[host] = h
+	r.broadcastLocked()
+}
+
+// Remotes returns what each connected host's stream said about itself.
+func (r *Registry) Remotes() map[string]Hello {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[string]Hello, len(r.remotes))
+	for host, h := range r.remotes {
+		out[host] = h
+	}
+	return out
 }
 
 // Sessions returns every session, ordered for display: the ones wanting

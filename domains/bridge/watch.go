@@ -222,9 +222,20 @@ func (w *Watcher) consume(ctx context.Context, host string, r io.Reader) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 
+	introduced := false
 	for scanner.Scan() {
 		if ctx.Err() != nil {
 			return nil
+		}
+		if !introduced {
+			// A stream opens with its hello. One that opens with anything else,
+			// an event or a heartbeat, is from a build that sends none.
+			introduced = true
+			if hello, ok := session.DecodeHello(scanner.Bytes()); ok {
+				w.Registry.SetRemote(host, hello)
+				continue
+			}
+			w.Registry.SetRemote(host, session.Hello{Protocol: 1})
 		}
 		e, err := session.DecodeEvent(scanner.Bytes())
 		if err != nil {

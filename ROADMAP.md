@@ -124,27 +124,13 @@ Since v0.4.0 a session whose Claude exits is reported ended by the remote half, 
 stale marking on *working* rows (v0.3.0) is now mostly a fallback, for a remote older than v0.4.0
 or one whose `ps` fails. It still marks a live turn that calls no tool for ten minutes (a long
 think, a slow API). With process checks working, the panel could skip the marking for a session
-that carries a `Process`, since its liveness is then known. That needs the stream to say "still
-checked" rather than the watcher inferring it.
+that carries a `Process`, since its liveness is then known. Since v0.5.0 the stream's hello says
+`check_processes`, and `Registry.Remotes` holds it per host, so the panel can tell.
 
 A race to keep in mind: a session resumed (`claude --resume`) keeps its session id under a new
 process. If the stream sees the old process dead just as the new one's first hook lands, the
 `gone` it appends can be newer than the resumed `working`. The next hook from the new process puts
 it right, so the window is one hook interval.
-
-## 7. Nothing verifies that the remote and local builds agree
-
-The two halves talk over a versioned wire format, and the remote one is upgraded by whoever
-administers that host. Unknown fields and unknown statuses are ignored rather than rejected, which
-is the right default — but a user whose remote build is much older gets quietly reduced function
-with nothing saying so.
-
-This stopped being hypothetical in v0.1.3: a remote that does not send `tmux.binary` leaves the
-Mac guessing `tmux`, which is the `command not found: tmux` that release fixed. The user upgrades
-the Mac, sees no change, and has nothing telling them the other half is the stale one.
-
-A version in the stream's first line, and a warning in the panel when it is older than the
-watcher expects.
 
 ## 8. Discover hosts rather than listing them
 
@@ -181,6 +167,11 @@ panel registration (redone on `Reconnects()`) as its only own logic. Keep `Link`
 and `ErrITermUnavailable` (wrapping `iterm2.ErrReconnecting`) so nothing breaks.
 
 ## Done
+
+- **v0.5.0**: the stream opens with a hello (protocol level, version, process checks), and the
+  panel names a host whose remote half is older. `--version` reads the `go install` version. The
+  old-watcher direction (a new stream read by an older watcher) is covered by a unit test that the
+  hello is refused as an event, not by running an old binary.
 
 - **v0.4.0**: a session whose Claude exits without a SessionEnd hook is reported ended. The hook
   records the nearest non-shell ancestor (pid + start time), and `stream` checks it. It is tested

@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -136,6 +138,13 @@ type row struct {
 	Stale bool
 }
 
+// outdatedHost is a host whose remote build is older than this one, which the
+// panel says rather than quietly showing less.
+type outdatedHost struct {
+	Host    string
+	Version string
+}
+
 // handleIndex renders the current state.
 func (p *Panel) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if !p.authorised(r) {
@@ -161,10 +170,19 @@ func (p *Panel) handleIndex(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	var outdated []outdatedHost
+	for host, hello := range p.Registry.Remotes() {
+		if hello.Protocol < session.Protocol {
+			outdated = append(outdated, outdatedHost{Host: host, Version: hello.Version})
+		}
+	}
+	slices.SortFunc(outdated, func(a, b outdatedHost) int { return strings.Compare(a.Host, b.Host) })
+
 	data := struct {
-		Token string
-		Rows  []row
-	}{Token: p.token, Rows: rows}
+		Token    string
+		Rows     []row
+		Outdated []outdatedHost
+	}{Token: p.token, Rows: rows, Outdated: outdated}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// The panel re-reads itself; nothing here should be cached.

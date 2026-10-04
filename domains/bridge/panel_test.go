@@ -754,3 +754,38 @@ func rowFor(t *testing.T, body, host string) string {
 	require.True(t, start >= 0 && end >= 0)
 	return body[start : i+end]
 }
+
+// A host whose stream sends no hello runs a build from before protocol 2, so it
+// cannot report a session whose Claude exited. The panel says so, for that host
+// only, through the real watcher and the real page.
+func TestPanelNamesAHostRunningAnOlderBuild(t *testing.T) {
+	registry := session.NewRegistry()
+	event := eventLine(t, "s1", session.StatusWaiting, "work")
+	hello, err := session.Hello{Protocol: session.Protocol, Version: "v9.9.9", CheckProcesses: true}.Encode()
+	require.NoError(t, err)
+	current := emit(t, string(hello), event)
+	old := emit(t, event)
+	launcher := &scriptLauncher{script: `if [ "$BRIDGE_TEST_HOST" = old-box ]; then ` + old + `; else ` + current + `; fi` + holdOpen}
+	w := &bridge.Watcher{Registry: registry, Launcher: launcher, Log: quietLog()}
+	watchInBackground(t, w, "old-box", "new-box")
+	waitFor(t, "both hosts to report", func() bool { return len(registry.Sessions()) == 2 })
+
+	p := startPanel(t, registry, newFakeTerminal())
+	_, body := get(t, p.URL())
+
+	assert.Contains(t, body, `data-outdated-host="old-box"`)
+	assert.Contains(t, body, "old-box runs an older iterm2-claude-bridge")
+	assert.NotContains(t, body, `data-outdated-host="new-box"`, "a current host was called outdated")
+	assert.Equal(t, session.Protocol, registry.Remotes()["new-box"].Protocol)
+	assert.Equal(t, "v9.9.9", registry.Remotes()["new-box"].Version)
+}
+
+// The notice goes with the stream: a host no longer connected is not named.
+func TestPanelForgetsAnOutdatedHostWhenItsStreamEnds(t *testing.T) {
+	registry := session.NewRegistry()
+	registry.SetRemote("old-box", session.Hello{Protocol: 1})
+	registry.ForgetHost("old-box")
+	p := startPanel(t, registry, newFakeTerminal())
+	_, body := get(t, p.URL())
+	assert.NotContains(t, body, "old-box")
+}

@@ -44,6 +44,10 @@
   }
   .meta { flex: none; opacity: 0.6; font-variant-numeric: tabular-nums; }
   .empty { padding: 8px 6px; opacity: 0.7; }
+  .outdated {
+    margin: 4px 6px; padding: 4px 6px; border-radius: 4px;
+    background: color-mix(in srgb, #e0902f 22%, Canvas);
+  }
   #error {
     margin: 4px 6px; padding: 4px 6px; border-radius: 4px;
     background: color-mix(in srgb, #c8453c 25%, Canvas);
@@ -52,6 +56,9 @@
 </style>
 
 <div id="error" role="alert"></div>
+{{range .Outdated}}
+<p class="outdated" data-outdated-host="{{.Host}}">{{.Host}} runs an older iterm2-claude-bridge{{if .Version}} ({{.Version}}){{end}}. Upgrade it there: until then it cannot report a session whose Claude has exited.</p>
+{{end}}
 
 {{if .Rows}}
 <ul>

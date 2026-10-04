@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taumatix/iterm2-claude-bridge/domains/reporter"
+	"github.com/taumatix/iterm2-claude-bridge/domains/session"
 )
 
 // defaultStateDirName is repeated from the reporter package for the flag's help
@@ -100,6 +101,11 @@ is the protocol, so nothing else is written there.`,
 				PollInterval: poll,
 				Heartbeat:    heartbeat,
 
+				Hello: &session.Hello{
+					Protocol:       session.Protocol,
+					Version:        version,
+					CheckProcesses: checkProcesses > 0,
+				},
 				CheckProcesses: checkProcesses,
 				Alive:          reporter.ProcessAlive,
 			}
