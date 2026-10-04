@@ -166,6 +166,10 @@ away, because iterm2-go v0.3.0's `Persistent` had no typed methods. v0.4.0 has t
 panel registration (redone on `Reconnects()`) as its only own logic. Keep `Link`'s exported API
 and `ErrITermUnavailable` (wrapping `iterm2.ErrReconnecting`) so nothing breaks.
 
+The bridge depends on iterm2-go v0.6.0 since 2026-10-05, and v0.6.0 removes that last piece too:
+`Persistent.RegisterTool` keeps a toolbelt tool registered across iTerm2 restarts, so `Link`
+need not re-register the panel on `Reconnects()` at all.
+
 ## Done
 
 - **v0.5.0**: the stream opens with a hello (protocol level, version, process checks), and the
