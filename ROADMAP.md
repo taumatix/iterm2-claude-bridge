@@ -118,18 +118,19 @@ third party — a variable, an RPC, anything published. If it can, this becomes 
 program. Until then the second panel is right, because guessing at an internal would break on
 every iTerm2 release.
 
-## 6. A session's status goes stale when the hook cannot run
+## 6. A model turn without a tool call is marked stale while alive
 
-Status is only as good as the last hook that fired. v0.3.0 marks a *working* row stale after ten
-quiet minutes, since a working session reports on every tool call. That leaves two gaps:
+Since v0.4.0 a session whose Claude exits is reported ended by the remote half, so the ten-minute
+stale marking on *working* rows (v0.3.0) is now mostly a fallback, for a remote older than v0.4.0
+or one whose `ps` fails. It still marks a live turn that calls no tool for ten minutes (a long
+think, a slow API). With process checks working, the panel could skip the marking for a session
+that carries a `Process`, since its liveness is then known. That needs the stream to say "still
+checked" rather than the watcher inferring it.
 
-- A *waiting* or *idle* session whose Claude was killed looks exactly like one resting, because
-  resting is silent too. Telling them apart needs the reporter to notice the process is gone: the
-  hook records Claude's pid, and the stream checks it and reports the session `gone`. A pid alone
-  can be reused, so it needs the process start time with it.
-- A model turn that calls no tool for over ten minutes (a long think, a slow API) is marked stale
-  while alive. `--stale-after` is the workaround. A `UserPromptSubmit` or periodic heartbeat from
-  the hook would make the threshold safe to shorten; the pid check above would make it unneeded.
+A race to keep in mind: a session resumed (`claude --resume`) keeps its session id under a new
+process. If the stream sees the old process dead just as the new one's first hook lands, the
+`gone` it appends can be newer than the resumed `working`. The next hook from the new process puts
+it right, so the window is one hook interval.
 
 ## 7. Nothing verifies that the remote and local builds agree
 
@@ -180,6 +181,11 @@ panel registration (redone on `Reconnects()`) as its only own logic. Keep `Link`
 and `ErrITermUnavailable` (wrapping `iterm2.ErrReconnecting`) so nothing breaks.
 
 ## Done
+
+- **v0.4.0**: a session whose Claude exits without a SessionEnd hook is reported ended. The hook
+  records the nearest non-shell ancestor (pid + start time), and `stream` checks it. It is tested
+  end to end with perl standing in for Claude, running the real hook through `/bin/sh` and then
+  being killed.
 
 - **v0.3.0**: a working session that has stopped reporting is marked stale, after ten minutes by
   default (`watch --stale-after`). It is tested by rendering the real panel over HTTP; how it looks

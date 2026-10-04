@@ -57,6 +57,21 @@ type Event struct {
 	// when a session is in an unexpected state, the question is always which hook
 	// last fired.
 	HookEvent string `json:"hook_event,omitempty"`
+
+	// Process is the Claude process the hook ran for, so the remote half can
+	// notice it has gone without a SessionEnd hook. Nil from a build before it
+	// was recorded, or when the hook could not tell.
+	Process *Process `json:"process,omitempty"`
+}
+
+// Process identifies one running process across time.
+type Process struct {
+	PID int `json:"pid"`
+
+	// Started is the process's start time as the host's ps reports it. A pid is
+	// reused once its process exits, so a pid alone cannot say the same process
+	// is still running; a pid with the same start time can.
+	Started string `json:"started"`
 }
 
 // TmuxTarget is enough to attach to the right place.

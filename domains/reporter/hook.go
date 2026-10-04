@@ -32,6 +32,11 @@ var ErrNotAStatusChange = errors.New("reporter: this hook event is not a status 
 type Hook struct {
 	Store *Store
 	Tmux  *TmuxResolver
+
+	// Process finds the Claude process the hook is running for, normally
+	// [ClaudeProcess]. Nil records none, and so does a failure: the status is
+	// still worth recording without it.
+	Process func(context.Context) (*session.Process, error)
 }
 
 // Handle reads a hook payload from r and records the resulting event.
@@ -74,6 +79,12 @@ func (h *Hook) Handle(ctx context.Context, r io.Reader) (session.Event, error) {
 	if h.Tmux != nil {
 		if target, err := h.Tmux.Resolve(ctx); err == nil {
 			event.Tmux = target
+		}
+	}
+
+	if h.Process != nil {
+		if p, err := h.Process(ctx); err == nil {
+			event.Process = p
 		}
 	}
 
