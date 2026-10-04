@@ -20,6 +20,11 @@ import (
 // watching Mac over SSH is the same order anyway.
 const DefaultPollInterval = time.Second
 
+// DefaultCheckProcesses is how often Stream looks for sessions whose Claude
+// process has exited. One ps per live session per check; ten seconds is quick
+// next to how long a human leaves a dead row before noticing it.
+const DefaultCheckProcesses = 10 * time.Second
+
 // Stream replays the recorded state and then follows the log, writing one JSON
 // event per line.
 //
@@ -38,6 +43,17 @@ type Stream struct {
 	// meaning beyond keeping an idle SSH connection from being reaped by a firewall
 	// that sees no traffic. Zero disables it.
 	Heartbeat time.Duration
+
+	// CheckProcesses is how often to look for sessions whose Claude process has
+	// exited without a SessionEnd hook. Zero, or a nil Alive, disables it.
+	CheckProcesses time.Duration
+
+	// Alive reports whether a session's recorded process is still running,
+	// normally [ProcessAlive].
+	Alive func(context.Context, session.Process) (bool, error)
+
+	// latest is each session's newest event as this stream has seen it.
+	latest map[string]session.Event
 
 	// afterReplay runs once, after the replay has been written and before the
 	// follow loop starts. Only a test sets it: it makes the window between those
@@ -71,8 +87,10 @@ func (s *Stream) Run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
+	s.latest = make(map[string]session.Event, len(replay))
 	out := bufio.NewWriter(w)
 	for _, e := range replay {
+		s.latest[e.SessionID] = e
 		if err := writeEvent(out, e); err != nil {
 			return err
 		}
@@ -88,11 +106,23 @@ func (s *Stream) Run(ctx context.Context, w io.Writer) error {
 	ticker := time.NewTicker(s.pollInterval())
 	defer ticker.Stop()
 
+	var checks <-chan time.Time
+	if s.CheckProcesses > 0 && s.Alive != nil {
+		checker := time.NewTicker(s.CheckProcesses)
+		defer checker.Stop()
+		checks = checker.C
+	}
+
 	lastWrite := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-checks:
+			if err := s.reportExited(ctx); err != nil {
+				return err
+			}
+			continue
 		case <-ticker.C:
 		}
 
@@ -169,6 +199,7 @@ func (s *Stream) follow(ctx context.Context, w io.Writer, offset int64) (wrote b
 			// partial write behind, and every session after it still matters.
 			continue
 		}
+		s.latest[e.SessionID] = e
 		if err := writeEvent(w, e); err != nil {
 			return wrote, consumed, err
 		}
@@ -176,6 +207,48 @@ func (s *Stream) follow(ctx context.Context, w io.Writer, offset int64) (wrote b
 	}
 	return wrote, consumed, nil
 }
+
+// reportExited records a session as gone when the Claude process its newest
+// event names has exited, as a SessionEnd hook would have if Claude had lived
+// to run it.
+//
+// It appends to the log rather than writing to the stream, so the event is
+// followed like any other: every watcher sees it, a later replay includes it,
+// and `list` agrees. Two streams on one host may both append it; the registry
+// takes a repeat of the newest status as no change.
+//
+// A process that cannot be checked is left alone: only a definite "not
+// running" ends a session.
+func (s *Stream) reportExited(ctx context.Context) error {
+	for id, e := range s.latest {
+		if e.Status == session.StatusGone || e.Process == nil {
+			continue
+		}
+		alive, err := s.Alive(ctx, *e.Process)
+		if err != nil || alive {
+			continue
+		}
+		gone := session.Event{
+			SessionID: id,
+			Status:    session.StatusGone,
+			Tmux:      e.Tmux,
+			Cwd:       e.Cwd,
+			HookEvent: ProcessExited,
+			Process:   e.Process,
+		}
+		if err := s.Store.Append(gone); err != nil {
+			return err
+		}
+		// Not reported again before the follow loop reads it back.
+		e.Status = session.StatusGone
+		s.latest[id] = e
+	}
+	return nil
+}
+
+// ProcessExited is the HookEvent of a gone event the stream recorded because
+// the session's process had exited, rather than one a hook reported.
+const ProcessExited = "process-exited"
 
 // size reports the log's current length, treating a missing file as empty.
 func (s *Stream) size() (int64, error) {

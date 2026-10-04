@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-04
+
+### Added
+
+- **A session whose Claude exits without a SessionEnd hook is reported ended.** A killed or
+  crashed Claude left its row at its last status for ever, so a "needs you" row could be a dead
+  process. The hook now records the Claude process it ran for: its nearest ancestor that is not
+  a shell, as a pid plus start time, since pids are reused. `stream` checks those every ten
+  seconds (`--check-processes`, `0` turns it off) and records the session as ended once the
+  process is gone. That is the same as a SessionEnd hook, so every watcher, a later replay and
+  `list` all agree. Both halves need this version; an older remote simply records no process.
+- `session.Event.Process` and `session.Process` on the wire (additive), and
+  `reporter.ClaudeProcess`, `reporter.ProcessAlive`, `reporter.ProcessExited`,
+  `reporter.DefaultCheckProcesses`, `Hook.Process`, `Stream.CheckProcesses` and `Stream.Alive`.
+
 ## [0.3.0] - 2026-10-04
 
 ### Added

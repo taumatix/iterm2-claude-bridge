@@ -40,7 +40,7 @@ a row in the panel that does not update.`,
 				return nil
 			}
 
-			hook := &reporter.Hook{Store: store, Tmux: reporter.NewTmuxResolver()}
+			hook := &reporter.Hook{Store: store, Tmux: reporter.NewTmuxResolver(), Process: reporter.ClaudeProcess}
 			event, err := hook.Handle(cmd.Context(), cmd.InOrStdin())
 			switch {
 			case errors.Is(err, reporter.ErrNotAStatusChange):
@@ -65,9 +65,10 @@ a row in the panel that does not update.`,
 
 func newStreamCommand() *cobra.Command {
 	var (
-		stateDir  string
-		poll      time.Duration
-		heartbeat time.Duration
+		stateDir       string
+		poll           time.Duration
+		heartbeat      time.Duration
+		checkProcesses time.Duration
 	)
 
 	cmd := &cobra.Command{
@@ -98,6 +99,9 @@ is the protocol, so nothing else is written there.`,
 				Store:        store,
 				PollInterval: poll,
 				Heartbeat:    heartbeat,
+
+				CheckProcesses: checkProcesses,
+				Alive:          reporter.ProcessAlive,
 			}
 			return stream.Run(ctx, cmd.OutOrStdout())
 		},
@@ -106,6 +110,8 @@ is the protocol, so nothing else is written there.`,
 	stateDirFlag(cmd, &stateDir)
 	cmd.Flags().DurationVar(&poll, "poll", reporter.DefaultPollInterval,
 		"how often to look for new events")
+	cmd.Flags().DurationVar(&checkProcesses, "check-processes", reporter.DefaultCheckProcesses,
+		"how often to look for sessions whose Claude has exited without saying so (0 disables)")
 	cmd.Flags().DurationVar(&heartbeat, "heartbeat", 60*time.Second,
 		"write a blank line after this long with nothing to say, so an idle connection is not reaped (0 disables)")
 	return cmd
