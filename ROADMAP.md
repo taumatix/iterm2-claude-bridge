@@ -118,12 +118,14 @@ third party — a variable, an RPC, anything published. If it can, this becomes 
 program. Until then the second panel is right, because guessing at an internal would break on
 every iTerm2 release.
 
-## 8. Discover hosts rather than listing them
+## 8. Per-host settings
 
-`--host` per host, every time. Reading them from a config file, or from `~/.ssh/config` with a
-marker, would make watching a dozen machines reasonable. A config file also gives somewhere for
-per-host settings — a different profile, a different remote command — which the flags cannot
-express today.
+v0.6.0 reads hosts from a file, one per line, and refuses anything after a host name so the syntax
+is free. Per-host settings (a different iTerm2 profile, remote command or ssh arguments) are
+what the flags cannot express. The likely shape is `key=value` after the host, with the remote
+command's quoting decided first: it has spaces and goes through two shells (see v0.1.3).
+Reading hosts from `~/.ssh/config` with a marker is the other half of the original entry, and
+probably not worth a parser for ssh's config grammar.
 
 ## 9. The panel polls itself every five seconds
 
@@ -157,6 +159,8 @@ The bridge depends on iterm2-go v0.6.0 since 2026-10-05, and v0.6.0 removes that
 need not re-register the panel on `Reconnects()` at all.
 
 ## Done
+
+- **v0.6.0**: a hosts file (`~/.config/iterm2-claude-bridge/hosts`, `--hosts-file`).
 
 - **v0.5.2**: a `claude --resume` racing the process check no longer shows the session as ended.
 
