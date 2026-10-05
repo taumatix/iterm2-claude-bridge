@@ -1,10 +1,13 @@
 package bridge_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -117,4 +120,45 @@ func TestTheFirstConnectionFailureIsReturned(t *testing.T) {
 	err := linkTo(t, srv).Connect(context.Background())
 
 	require.Error(t, err)
+}
+
+// lockedBuffer is a log destination a test can read while the link writes.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// A reconnect that keeps failing used to log only at debug level, and with the
+// panel gone from the toolbelt nothing told the user why. After a few attempts
+// it says so once at warning level, naming the likely causes, and not again.
+func TestAReconnectThatKeepsFailingWarnsOnce(t *testing.T) {
+	srv := startITermServer(t)
+	link := linkTo(t, srv)
+	var logs lockedBuffer
+	link.Log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	link.Retry = time.Millisecond
+	runLink(t, link)
+	srv.eventually(func(_ int, reg []string, _ int) bool { return len(reg) == 1 }, "never registered")
+
+	srv.stop()
+
+	require.Eventually(t, func() bool { return strings.Contains(logs.String(), "still cannot reach iTerm2") },
+		5*time.Second, 10*time.Millisecond, "no warning after repeated failures; logs: %s", logs.String())
+	time.Sleep(300 * time.Millisecond) // several more attempts at the doubling wait
+	out := logs.String()
+	assert.Equal(t, 1, strings.Count(out, "still cannot reach iTerm2"), "the warning repeated: %s", out)
+	assert.Contains(t, out, "Enable Python API")
+	assert.Contains(t, out, "Automation")
 }
