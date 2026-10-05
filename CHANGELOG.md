@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-05
+
+### Added
+
+- **A hosts file.** `watch` reads the hosts to follow from
+  `~/.config/iterm2-claude-bridge/hosts` (or `$XDG_CONFIG_HOME/…`, or `--hosts-file`), one per
+  line with `#` comments, so watching many machines no longer means a `--host` per machine.
+  `--host` adds to the file. A missing default file is fine; a missing `--hosts-file` is an error.
+  A line with anything after the host name is refused, keeping that syntax free for per-host
+  settings.
+
+### Changed
+
+- `--host` is no longer required by the command line parser. `watch` with no hosts from either
+  place still refuses, now naming the file it looked in.
+
 ## [0.5.2] - 2026-10-05
 
 ### Fixed

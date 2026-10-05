@@ -41,7 +41,7 @@ No inbound ports, no daemon to expose: the only channel is an SSH connection you
 Go 1.27 or newer, on both sides.
 
 ```sh
-go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.5.2
+go install github.com/taumatix/iterm2-claude-bridge/cmd/iterm2-claude-bridge@v0.6.0
 ```
 
 ### On each remote host
@@ -86,6 +86,17 @@ jump host and identity belong. For what it cannot express:
 ```sh
 iterm2-claude-bridge watch --host build-box --ssh-arg -J --ssh-arg bastion
 ```
+
+To stop passing `--host` every time, list the hosts in `~/.config/iterm2-claude-bridge/hosts`
+(or a file named with `--hosts-file`), one per line, `#` for comments, then run `watch` alone:
+
+```
+# ~/.config/iterm2-claude-bridge/hosts
+build-box
+gpu-box   # the big one
+```
+
+`--host` adds to what the file lists.
 
 ## The panel
 

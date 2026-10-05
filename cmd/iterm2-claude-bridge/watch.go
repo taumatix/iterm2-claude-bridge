@@ -19,6 +19,7 @@ import (
 func newWatchCommand() *cobra.Command {
 	var (
 		hosts         []string
+		hostsFile     string
 		sshArgs       []string
 		sshProgram    string
 		remoteCommand string
@@ -29,7 +30,7 @@ func newWatchCommand() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "watch --host HOST [--host HOST ...]",
+		Use:   "watch [--host HOST ...]",
 		Short: "Watch remote hosts and show their Claude sessions in iTerm2's toolbelt",
 		Long: `Watch remote hosts and show their Claude Code sessions in iTerm2's toolbelt.
 
@@ -40,14 +41,25 @@ session, opening one that SSHes in and attaches if there is none.
 Host names are looked up in your ~/.ssh/config, so that is where the login name,
 port, jump host and identity belong.
 
+Hosts can also be listed in a file, one per line ("#" starts a comment), by
+default ~/.config/iterm2-claude-bridge/hosts. --host adds to what it lists.
+
 iTerm2's API must be enabled: Settings > General > Magic > Enable Python API. The
 first connection raises a permission prompt.`,
 		Example: `  iterm2-claude-bridge watch --host build-box --host gpu-box
   iterm2-claude-bridge watch --host build-box --ssh-arg -J --ssh-arg bastion`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			path := hostsFile
+			if path == "" {
+				path = defaultHostsFile()
+			}
+			hosts, err := resolveHosts(hosts, path, hostsFile != "")
+			if err != nil {
+				return fail("%s", err)
+			}
 			if len(hosts) == 0 {
-				return fail("no hosts to watch: pass --host at least once")
+				return fail("no hosts to watch: pass --host, or list them one per line in %s", path)
 			}
 
 			level := slog.LevelInfo
@@ -87,7 +99,6 @@ first connection raises a permission prompt.`,
 			}
 			opener := &bridge.Opener{Terminal: link, SSH: ssh, Profile: profile, Log: log}
 
-			var err error
 			panel, err = bridge.NewPanel(registry, opener, log)
 			if err != nil {
 				return err
@@ -126,6 +137,8 @@ first connection raises a permission prompt.`,
 		"a host to watch, as named in your ssh config; repeat for several")
 	cmd.Flags().StringArrayVar(&sshArgs, "ssh-arg", nil,
 		"extra argument for ssh, before the destination; repeat for several")
+	cmd.Flags().StringVar(&hostsFile, "hosts-file", "",
+		"file listing hosts to watch, one per line (default ~/.config/iterm2-claude-bridge/hosts)")
 	cmd.Flags().StringVar(&sshProgram, "ssh", "ssh", "the ssh binary to use")
 	cmd.Flags().StringVar(&remoteCommand, "remote-command", bridge.DefaultRemoteCommand,
 		"how to run this program on the remote host")
@@ -137,11 +150,5 @@ first connection raises a permission prompt.`,
 		"how long a working session may go without an update before its row is marked stale (0 turns it off)")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "log more")
 
-	// Required in practice, and saying so in the flag means cobra prints the usage
-	// rather than this failing at the first ssh.
-	if err := cmd.MarkFlagRequired("host"); err != nil {
-		// Only fails for a flag that does not exist, which would be a bug here.
-		panic(err)
-	}
 	return cmd
 }
