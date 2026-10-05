@@ -46,6 +46,11 @@ type Link struct {
 
 const maxLinkRetry = 30 * time.Second
 
+// linkWarnAfter is how many reconnect attempts fail before Link says so at
+// warning level: about half a minute at the default one-second start, longer
+// than iTerm2 takes to restart after an update.
+const linkWarnAfter = 5
+
 // Connect makes the first connection and returns its error, so a bridge started
 // with the API switched off says so at once instead of retrying in silence.
 func (l *Link) Connect(ctx context.Context) error {
@@ -97,10 +102,18 @@ func (l *Link) redial(ctx context.Context) (*iterm2.Conn, bool) {
 	if wait <= 0 {
 		wait = time.Second
 	}
-	for {
+	for failures := 1; ; failures++ {
 		conn, err := l.dialOnce(ctx)
 		if err == nil {
 			return conn, true
+		}
+		if failures == linkWarnAfter {
+			// The panel is gone from the toolbelt, so the log is the only
+			// place left to say so. Once, not every 30s.
+			l.log().Warn("still cannot reach iTerm2; the panel stays away until it can. "+
+				"Check Settings > General > Magic > Enable Python API, and that macOS lets this "+
+				"program control iTerm2 (System Settings > Privacy & Security > Automation)",
+				"error", err, "attempts", failures)
 		}
 		l.log().Debug("iTerm2 not back yet", "error", err, "retry_in", wait)
 		select {

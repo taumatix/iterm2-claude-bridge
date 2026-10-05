@@ -134,17 +134,13 @@ while nothing has changed, and a click landing during a reload is lost (worked a
 cancelling the timer). Server-sent events over the same loopback server would remove both, and
 `Registry.Changed()` already exists to drive them.
 
-## 10. A reconnect that keeps failing says so only in the log
+## 10. A reconnect that keeps failing is only in a terminal the user may not watch
 
-Since v0.2.0 `watch` reconnects when iTerm2 comes back. If it never can — the API was switched off,
-or macOS denies the AppleScript cookie request a reconnect needs — it retries every 30s for ever,
-and the failures are logged at debug level. The panel is gone from the toolbelt, so the user sees
-nothing at all, which is the original problem again in a narrower case.
-
-The first failed attempt is the moment to say something at warning level, once, naming the likely
-cause (the Automation permission in System Settings, or the API setting) rather than repeating it
-every 30s. Whether to go further, a macOS notification, needs a real run to see what the failure
-actually looks like from a process iTerm2 did not launch.
+Since v0.6.1 `watch` warns once, after five failed reconnects (about half a minute), naming the
+API setting and the Automation permission. That warning goes to `watch`'s stderr, which is
+wherever `watch` was started, often a terminal nobody is looking at. A macOS notification would
+reach the user. Whether it is worth it, and what the failure actually looks like from a process
+iTerm2 did not launch, needs a real run (entry 1).
 
 ## 11. `Link` duplicates what iterm2-go's `Persistent` now does
 

@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-05
+
+### Fixed
+
+- **A reconnect to iTerm2 that keeps failing now says so.** When iTerm2 never comes back (the
+  Python API was switched off, or macOS denies the Automation permission a reconnect needs),
+  `watch` kept retrying and logged only at debug level, while the panel was gone from the
+  toolbelt. After five failed attempts, about half a minute, it now warns once and names both
+  likely causes.
+
 ## [0.6.0] - 2026-10-05
 
 ### Added
