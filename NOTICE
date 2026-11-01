@@ -1,0 +1,20 @@
+iterm2-claude-bridge
+Copyright 2026 Taumatix
+
+License: GPL-2.0-or-later (see LICENSE). This is the most permissive license available to this
+program, not the project's usual Apache-2.0, because it links github.com/taumatix/iterm2-go, which
+includes iTerm2's GPL-licensed protocol definition. See that repository's NOTICE for the full basis.
+
+Why "or later" matters here
+  This program depends on github.com/spf13/cobra and github.com/inconshreveable/mousetrap, both
+  Apache-2.0. Apache-2.0 is not compatible with GPL-2.0-only but is compatible with GPLv3, so the
+  combined work is distributable under GPLv3 by virtue of the "or later" grant.
+
+Other dependencies (all compatible)
+  github.com/coder/websocket   ISC
+  github.com/stretchr/testify  MIT
+  go.yaml.in/yaml/v3           MIT / Apache-2.0
+  golang.org/x/net             BSD-3-Clause
+  google.golang.org/protobuf   BSD-3-Clause
+  github.com/spf13/pflag       BSD-3-Clause
+  Checked against api.deps.dev on 2026-11-01 for the versions in go.mod.
