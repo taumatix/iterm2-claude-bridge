@@ -11,7 +11,7 @@ unrefreshed pin cannot hide.
 - name: claude-code-hooks
   kind: docs
   url: https://code.claude.com/docs/en/hooks
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
     the hook event names and the payload fields. Retrieved and read on 2026-09-26,
     not recalled. Nine events are acted on (SessionStart, UserPromptSubmit,
@@ -31,7 +31,7 @@ unrefreshed pin cannot hide.
   repo: gnachman/iTerm2
   path: api/library/python/iterm2/iterm2/profile.py
   sha: a23c8c3afc1183dd4fd4e2d782da6943b03e29bd
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
     the profile properties a new tab is created with. Read from iTerm2's own Python
     library rather than guessed: set_use_custom_command writes "Custom Command" and
@@ -51,7 +51,7 @@ unrefreshed pin cannot hide.
   repo: gnachman/iTerm2
   path: sources/Settings/Profiles/ITAddressBookMgr.m
   ref: master
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
     how a profile's Command becomes a running program, read on 2026-09-26 because
     two v0.1.1 bugs were in it. KEY_CUSTOM_COMMAND is "Custom Command" and
@@ -79,7 +79,7 @@ unrefreshed pin cannot hide.
   repo: gnachman/iTerm2
   path: proto/api.proto
   ref: master
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
     which window a new tab belongs in. CreateTabRequest.window_id is optional and
     a new window is created without it, which is why every click in v0.1.1 opened
@@ -94,7 +94,7 @@ unrefreshed pin cannot hide.
 - name: iterm2-claude-code-integration
   kind: docs
   url: https://iterm2.com/claude-code-integration.html
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
     iTerm2's own Claude Code integration, which this complements rather than
     extends. Read on 2026-09-26: it installs a cc-status hook into
@@ -116,7 +116,7 @@ unrefreshed pin cannot hide.
 - name: iterm2-workgroups
   kind: docs
   url: https://iterm2.com/documentation-workgroups.html
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
     how the chat / diff / code-review panes of iTerm2's integration are built. A
     Workgroup is "a set of related sessions that iTerm2 builds from a single one",
@@ -137,11 +137,11 @@ unrefreshed pin cannot hide.
 
 - name: tmux
   kind: cli
-  version: "3.7c"
+  version: "3.8"
   minimum: "2.4"
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
-    two behaviours verified against 3.7c on 2026-09-26 rather than assumed.
+    two behaviours verified against 3.7c on 2026-09-26 rather than assumed; the real-tmux tests (TestResolveAgainstRealTmux, TestHookUnderRealTmuxRecordsTheTmuxTarget) and the full suite re-run green against a tmux 3.8 built from source on 2026-11-05.
     `display-message -p -t <pane> '#{session_name}|#{window_id}|#{pane_id}'` prints
     the three fields; for a pane it does not know it exits 0 with empty output,
     which is why the output is what decides success and not the exit status. A lone
@@ -153,8 +153,8 @@ unrefreshed pin cannot hide.
 
 - name: openssh
   kind: cli
-  version: "10.3p1"
-  checked: 2026-11-02
+  version: "10.6p1"
+  checked: 2026-11-05
   note: >-
     `ssh` is invoked, never linked. Host names are passed through untouched so the
     user's ~/.ssh/config decides the login name, port, jump host and identity.
@@ -167,6 +167,7 @@ unrefreshed pin cannot hide.
     the given command in a non-interactive session", whose PATH commonly lacks a
     tmux under /opt/homebrew/bin, which is why the reporter sends the path it
     resolved.
+    Moved from 10.3p1 on 2026-11-05: the suite passes with a built-from-source 10.6p1 ssh first on PATH, and both quoted ssh(1) sentences are unchanged in its man page. Still no real sshd was connected to (see hold).
   hold: >-
     not verified against a real SSH server by any automated run. The tests drive a
     real subprocess, which is what ssh is to this program, and a stub ssh for the
@@ -177,7 +178,7 @@ unrefreshed pin cannot hide.
   kind: go-module
   module: github.com/taumatix/iterm2-go
   version: v0.9.0
-  checked: 2026-11-02
+  checked: 2026-11-05
   note: >-
     the iTerm2 client. Written by the same author as this program, and its own
     UPSTREAM.md records that its connection layer is not verified against a running
