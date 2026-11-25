@@ -11,7 +11,7 @@ unrefreshed pin cannot hide.
 - name: claude-code-hooks
   kind: docs
   url: https://code.claude.com/docs/en/hooks
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     the hook event names and the payload fields. Retrieved and read on 2026-09-26,
     not recalled. Nine events are acted on (SessionStart, UserPromptSubmit,
@@ -22,7 +22,9 @@ unrefreshed pin cannot hide.
     than rejected, because Claude Code adds them far more often than it removes
     them.
   hold: >-
-    a renamed event would silently stop being reported rather than fail loudly:
+    Re-read 2026-11-26: all nine acted-on events and the common fields session_id,
+    hook_event_name and cwd are still documented; the page now lists 34 events (was
+    33), the additions being ones this program ignores. A renamed event would silently stop being reported rather than fail loudly:
     the hook would never fire, so there is nothing to notice. Nothing automated can
     see that. Re-read the page when sessions stop changing state.
 
@@ -31,7 +33,7 @@ unrefreshed pin cannot hide.
   repo: gnachman/iTerm2
   path: api/library/python/iterm2/iterm2/profile.py
   sha: a23c8c3afc1183dd4fd4e2d782da6943b03e29bd
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     the profile properties a new tab is created with. Read from iTerm2's own Python
     library rather than guessed: set_use_custom_command writes "Custom Command" and
@@ -51,7 +53,7 @@ unrefreshed pin cannot hide.
   repo: gnachman/iTerm2
   path: sources/Settings/Profiles/ITAddressBookMgr.m
   ref: master
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     how a profile's Command becomes a running program, read on 2026-09-26 because
     two v0.1.1 bugs were in it. KEY_CUSTOM_COMMAND is "Custom Command" and
@@ -79,7 +81,7 @@ unrefreshed pin cannot hide.
   repo: gnachman/iTerm2
   path: proto/api.proto
   ref: master
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     which window a new tab belongs in. CreateTabRequest.window_id is optional and
     a new window is created without it, which is why every click in v0.1.1 opened
@@ -94,7 +96,7 @@ unrefreshed pin cannot hide.
 - name: iterm2-claude-code-integration
   kind: docs
   url: https://iterm2.com/claude-code-integration.html
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     iTerm2's own Claude Code integration, which this complements rather than
     extends. Read on 2026-09-26: it installs a cc-status hook into
@@ -107,7 +109,9 @@ unrefreshed pin cannot hide.
     integration uses the Python API to add Code Review findings to the
     Workgroup's shared Clippings panel.
   hold: >-
-    the page documents no extension point for a third party to report sessions into
+    Re-read 2026-11-26: page still describes cc-status, the Session Status toolbelt
+    and the Chat/Diff/Code Review workgroup; still no extension point, no minimum
+    version, no mention of remote, SSH or tmux. The page documents no extension point for a third party to report sessions into
     that built-in tool, and says nothing about remote hosts, SSH or tmux. That is
     why this registers its own panel instead. If iTerm2 ever publishes a way to
     contribute rows, one combined list would be better than two panels — see
@@ -116,7 +120,7 @@ unrefreshed pin cannot hide.
 - name: iterm2-workgroups
   kind: docs
   url: https://iterm2.com/documentation-workgroups.html
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     how the chat / diff / code-review panes of iTerm2's integration are built. A
     Workgroup is "a set of related sessions that iTerm2 builds from a single one",
@@ -124,7 +128,11 @@ unrefreshed pin cannot hide.
     Profile, a Mode (Regular, Diff or Code Review), a Command, a Name and an
     optional Shortcut, and its command runs when the Workgroup is entered.
   hold: >-
-    no API. proto/api.proto at gnachman/iTerm2 master on 2026-09-26 contains no
+    Re-read 2026-11-26: Peer fields (Profile, Mode, Command, Name, Shortcut) and the
+    variables gitBase, file, codeReviewPrompt, codeReviewSystemPrompt unchanged; the
+    page says file and git-base values are shell-escaped before substitution, adds
+    Enter/Exit Workgroup triggers, and documents no Python API or scope for the
+    parent session's user. variables. No API. proto/api.proto at gnachman/iTerm2 master on 2026-09-26 contains no
     message, field or enum matching "workgroup" or "peer", so a Workgroup can be
     neither created nor entered from this program — only defined by a human in
     Settings and reached through the profile a tab is opened with. Re-read on
@@ -139,7 +147,7 @@ unrefreshed pin cannot hide.
   kind: cli
   version: "3.8"
   minimum: "2.4"
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     two behaviours verified against 3.7c on 2026-09-26 rather than assumed; the real-tmux tests (TestResolveAgainstRealTmux, TestHookUnderRealTmuxRecordsTheTmuxTarget) and the full suite re-run green against a tmux 3.8 built from source on 2026-11-05.
     `display-message -p -t <pane> '#{session_name}|#{window_id}|#{pane_id}'` prints
@@ -148,13 +156,13 @@ unrefreshed pin cannot hide.
     `;` argument separates two tmux commands, which is how select-window and
     attach-session are sent together.
   hold: >-
-    the minimum is a judgement, not a measurement: format strings and `-t` are long
+    2026-11-26: github.com/tmux/tmux tags show 3.8 is still the newest release. The minimum is a judgement, not a measurement: format strings and `-t` are long
     established, but nothing here has been run against an older tmux.
 
 - name: openssh
   kind: cli
   version: "10.6p1"
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     `ssh` is invoked, never linked. Host names are passed through untouched so the
     user's ~/.ssh/config decides the login name, port, jump host and identity.
@@ -169,7 +177,8 @@ unrefreshed pin cannot hide.
     resolved.
     Moved from 10.3p1 on 2026-11-05: the suite passes with a built-from-source 10.6p1 ssh first on PATH, and both quoted ssh(1) sentences are unchanged in its man page. Still no real sshd was connected to (see hold).
   hold: >-
-    not verified against a real SSH server by any automated run. The tests drive a
+    2026-11-26: openssh-portable tags show 10.6p2 now exists (pinned 10.6p1); not yet
+    run against, so the pin stays 10.6p1. Not verified against a real SSH server by any automated run. The tests drive a
     real subprocess, which is what ssh is to this program, and a stub ssh for the
     stderr path — but no test has connected to a host. See ROADMAP.md, "What two
     real runs have not reached yet".
@@ -178,7 +187,7 @@ unrefreshed pin cannot hide.
   kind: go-module
   module: github.com/taumatix/iterm2-go
   version: v0.9.0
-  checked: 2026-11-23
+  checked: 2026-11-26
   note: >-
     the iTerm2 client. Written by the same author as this program, and its own
     UPSTREAM.md records that its connection layer is not verified against a running
